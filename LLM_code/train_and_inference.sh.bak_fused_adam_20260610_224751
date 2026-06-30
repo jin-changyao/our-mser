@@ -1,0 +1,228 @@
+#!/bin/bash
+set -e
+
+# ============================================================
+# SpeechCueLLM reproduction script
+# Setting: IEMOCAP + LLaMA-2-7B + LoRA + speech description
+# Path: /home/pc/jcy/SpeechCueLLM
+# GPU: single A5000 24GB
+# ============================================================
+
+FLAG=1
+
+# ------ select base model ----------
+MODEL_NAME='LLaMA2'
+Experiments_setting='lora'
+dataset='iemocap'
+
+# ------ SpeechCue setting ----------
+# Text + speech description
+audio_description='True'
+audio_impression='False'
+audio_context='False'
+audio_only='False'
+
+# ------ Training setting ----------
+SEED=1
+num_train_epochs=15
+LORA_LR=3e-4
+
+use_encoder='False'
+
+accumulations=8
+graphics_card=1
+mini_batch_size=1
+
+port=29500
+BS=$((accumulations * graphics_card * mini_batch_size))
+
+historical_window=12
+data_percent=1.0
+
+task='speech_des'
+
+# If you want to specify GPU, modify this.
+# For single-card A5000, GPU 0 is usually fine.
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+# -----------------------------------------------------------------------------
+
+
+case ${MODEL_NAME} in
+'ChatGLM'|'ChatGLM2'|'LLaMA'|'LLaMA2'|'LLaMA3'|'LLaMA3-instruct'|'LLaMA3-instruct-70b'|'Bloom-560m'|'Phi3-medium')
+    case ${Experiments_setting} in
+    'zero_shot'|'few_shot'|'lora'|'all_parameters')
+        case ${dataset} in
+        'iemocap'|'meld')
+            echo "******************************************************************************************"
+            echo "All parameters are valid."
+            echo "Dataset: ${dataset}"
+            echo "Base model: ${MODEL_NAME}"
+            echo "SFT method: ${Experiments_setting}"
+            echo "******************************************************************************************"
+            ;;
+        *)
+            echo "The dataset parameter is invalid. CHECK IT OUT!"
+            FLAG=0
+            ;;
+        esac
+        ;;
+    *)
+        echo "The Experiments_setting parameter is invalid. CHECK IT OUT!"
+        FLAG=0
+        ;;
+    esac
+    ;;
+*)
+    echo "The MODEL_NAME parameter is invalid. CHECK IT OUT!"
+    FLAG=0
+    ;;
+esac
+
+
+if [ ${FLAG} = 1 ]
+then
+    DATA_PATH=$(python data_process.py \
+        --dataset ${dataset} \
+        --historical_window ${historical_window} \
+        --audio_description ${audio_description} \
+        --audio_impression ${audio_impression} \
+        --audio_only ${audio_only} \
+        --audio_context ${audio_context} \
+        --experiments_setting ${Experiments_setting})
+
+    if [ $? -eq 0 ]; then
+        echo "******************************************************************************************"
+        echo "Data processing has executed successfully!"
+        echo "Processed Data_Path: ${DATA_PATH}"
+        echo "******************************************************************************************"
+    else
+        echo "Data processing script encountered an error."
+        exit 1
+    fi
+
+
+    if [ ${dataset} = 'iemocap' ]
+    then
+        MAX_LENGTH=2500
+    elif [ ${dataset} = 'meld' ]
+    then
+        MAX_LENGTH=1500
+    else
+        echo "Dataset is not supported."
+        exit 1
+    fi
+
+    echo "******************************************************************************************"
+    echo "Dataset: ${dataset}"
+    echo "Max context length: ${MAX_LENGTH}"
+    echo "******************************************************************************************"
+
+
+    if [ ${MODEL_NAME} = 'LLaMA2' ]
+    then
+        MODEL_PATH='/home/pc/jcy/SpeechCueLLM/LLM_bases/Llama-2-7b-hf'
+    elif [ ${MODEL_NAME} = 'LLaMA3' ]
+    then
+        MODEL_PATH='LLaMA3 MODELPATH'
+    elif [ ${MODEL_NAME} = 'LLaMA3-instruct' ]
+    then
+        MODEL_PATH='LLaMA3-instruct MODELPATH'
+    elif [ ${MODEL_NAME} = 'LLaMA3-instruct-70b' ]
+    then
+        MODEL_PATH='LLaMA3-instruct-70b MODELPATH'
+    elif [ ${MODEL_NAME} = 'Phi3-medium' ]
+    then
+        MODEL_PATH='Phi3-medium MODELPATH'
+    elif [ ${MODEL_NAME} = 'LLaMA' ]
+    then
+        MODEL_PATH='LLaMA MODELPATH'
+    elif [ ${MODEL_NAME} = 'ChatGLM' ]
+    then
+        MODEL_PATH='CHATGLM MODELPATH'
+    else
+        echo "Model is not supported."
+        exit 1
+    fi
+
+    echo "******************************************************************************************"
+    echo "Model path:"
+    echo "${MODEL_PATH}"
+    echo "******************************************************************************************"
+
+
+    if [ ${Experiments_setting} = 'zero_shot' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=False
+        LORA=False
+        LR=0
+        CHECKPOINT_DIR=None
+        echo "Experiment setting: ZERO_SHOT"
+    elif [ ${Experiments_setting} = 'few_shot' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=False
+        LORA=False
+        LR=0
+        CHECKPOINT_DIR=None
+        echo "Experiment setting: FEW_SHOT"
+    elif [ ${Experiments_setting} = 'lora' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=True
+        LORA=True
+        LR=${LORA_LR}
+        CHECKPOINT_DIR=None
+        echo "Experiment setting: LORA"
+    elif [ ${Experiments_setting} = 'all_parameters' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=True
+        LORA=False
+        LR=2e-5
+        CHECKPOINT_DIR=None
+        echo "Experiment setting: ALL_PARAMETERS"
+    else
+        echo "Invalid experiment setting."
+        exit 1
+    fi
+
+
+    OUTPUT_DIR="../experiments/${MODEL_NAME}/${Experiments_setting}/${dataset}/window_${historical_window}/LR_${LR}_BS_${BS}_per_${data_percent}_${task}_class5_${SEED}"
+
+    echo "******************************************************************************************"
+    echo "Batch size: ${BS}"
+    echo "Gradient accumulation steps: ${accumulations}"
+    echo "Output dir: ${OUTPUT_DIR}"
+    echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
+    echo "******************************************************************************************"
+
+
+    if [ ${use_encoder} = 'True' ]
+    then
+        echo "You selected encoder-based model, but this script is configured for prompt-based SpeechCueLLM."
+        echo "Set use_encoder='False' for the main reproduction."
+        exit 1
+    else
+        deepspeed --master_port=${port} main.py \
+            --dataset ${dataset} \
+            --model_name_or_path ${MODEL_PATH} \
+            --data_dir ${DATA_PATH} \
+            --output_dir ${OUTPUT_DIR} \
+            --max_length ${MAX_LENGTH} \
+            --batch_size ${BS} \
+            --deepspeed_config ../LLM_code/data_utils/deepspeed_config.json \
+            --gradient_accumulation_steps ${accumulations} \
+            --eval_batch_size 1 \
+            --num_train_epochs ${num_train_epochs} \
+            --save_steps 100000 \
+            --lora ${LORA} \
+            --learning_rate ${LR} \
+            --do_eval ${DO_EVAL} \
+            --do_train ${DO_TRAIN} \
+            --statistic_mode True \
+            --data_percent ${data_percent} \
+            --seed ${SEED}
+    fi
+fi

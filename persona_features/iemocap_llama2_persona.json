@@ -1,0 +1,610 @@
+{
+  "dataset": "iemocap",
+  "model_name_or_path": "/home/pc/jcy/SpeechCueLLM/LLM_bases/Llama-2-7b-hf",
+  "profiles": {
+    "Ses03F_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_script03_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02F_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_impro08": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_script01_3": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_script03_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_script03_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_impro05b": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02F_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_script01_3": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_impro05": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_script03_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02F_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_script03_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_impro04": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro08b": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_script01_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_script01_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_impro05": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_impro07": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_impro08": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_impro05": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_impro05": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro06": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04F_impro04": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04M_impro06": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script03_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_impro02": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_script02_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04M_impro08": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_script03_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04F_script01_3": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_impro05": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro07": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script03_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04F_impro08": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_script03_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_script03_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_impro02": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02F_script01_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_impro08": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_script03_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_script01_3": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_impro05": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro05a": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04F_impro03": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_impro01": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script01_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_impro01": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_script03_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04M_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro01": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04M_script02_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_script01_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_impro01": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04M_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_impro05": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_script03_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_impro06": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_impro04": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01F_impro01": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02F_impro03": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_script03_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_impro01": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01F_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_impro02": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03F_script02_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses02M_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04M_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_impro03": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_impro08": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_impro04": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_script01_1b": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_script01_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_impro08": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_impro07": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_impro06": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_script01_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_impro01": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_script03_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05M_impro01": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script03_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_impro06": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script01_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05F_impro05": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_script03_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script03_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script01_3": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_impro04": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_impro03": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses05M_impro05": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses05F_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses04F_script02_1": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02M_script01_2": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_impro02": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_impro08a": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses01M_impro01": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses04F_impro07": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03F_impro01": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses02F_impro02": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses01M_script03_1": {
+      "Speaker_1": "",
+      "Speaker_0": ""
+    },
+    "Ses03M_script02_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    },
+    "Ses03M_script03_2": {
+      "Speaker_0": "",
+      "Speaker_1": ""
+    }
+  }
+}

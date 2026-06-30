@@ -1,0 +1,17 @@
+LLM_bases/*
+!LLM_bases/put_LLM_backbones_here.txt
+
+experiments/
+experiemnts/
+PROCESSED_DATASET/
+
+__pycache__/
+*.pyc
+
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+*.log

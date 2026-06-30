@@ -1,0 +1,190 @@
+#!/bin/bash
+set -e
+
+# ============================================================
+# SpeechCueLLM single-GPU test script
+# Setting: IEMOCAP + LLaMA-2-7B + LoRA + speech description
+# Purpose: bypass DeepSpeed fused_adam error
+# ============================================================
+
+# 强制只用第 0 张卡
+export CUDA_VISIBLE_DEVICES=0
+export TRANSFORMERS_OFFLINE=1
+
+FLAG=1
+
+# ------ select base model ----------
+MODEL_NAME='LLaMA2'
+Experiments_setting='lora'
+dataset='iemocap'
+
+# ------ SpeechCue setting ----------
+audio_description='True'
+audio_impression='False'
+audio_context='False'
+audio_only='False'
+include_persona='True'
+persona_path='../persona_features/'${dataset}'_llama2_persona.json'
+
+# ------ Training setting ----------
+SEED=1
+
+# 先跑 1 个 epoch 测试流程
+num_train_epochs=15
+
+LORA_LR=3e-4
+use_encoder='False'
+
+# 无 DeepSpeed 时，batch_size 先设 1，最稳
+BS=8
+accumulations=8
+
+historical_window=12
+data_percent=1.0
+
+task='text_speech_persona'
+
+# 模型路径
+MODEL_PATH='/home/pc/jcy/SpeechCueLLM/LLM_bases/Llama-2-7b-hf'
+
+# -----------------------------------------------------------------------------
+
+
+case ${MODEL_NAME} in
+'ChatGLM'|'ChatGLM2'|'LLaMA'|'LLaMA2'|'LLaMA3'|'LLaMA3-instruct'|'LLaMA3-instruct-70b'|'Bloom-560m'|'Phi3-medium')
+    case ${Experiments_setting} in
+    'zero_shot'|'few_shot'|'lora'|'all_parameters')
+        case ${dataset} in
+        'iemocap'|'meld')
+            echo "******************************************************************************************"
+            echo "All parameters are valid."
+            echo "Dataset: ${dataset}"
+            echo "Base model: ${MODEL_NAME}"
+            echo "SFT method: ${Experiments_setting}"
+            echo "CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES}"
+            echo "******************************************************************************************"
+            ;;
+        *)
+            echo "The dataset parameter is invalid. CHECK IT OUT!"
+            FLAG=0
+            ;;
+        esac
+        ;;
+    *)
+        echo "The Experiments_setting parameter is invalid. CHECK IT OUT!"
+        FLAG=0
+        ;;
+    esac
+    ;;
+*)
+    echo "The MODEL_NAME parameter is invalid. CHECK IT OUT!"
+    FLAG=0
+    ;;
+esac
+
+
+if [ ${FLAG} = 1 ]
+then
+    if [ "${include_persona}" = 'True' ] && [ ! -f "${persona_path}" ]
+    then
+        echo "Persona feature file not found: ${persona_path}"
+        echo "Please generate it first with generate_persona_features.py."
+        exit 1
+    fi
+
+    DATA_PATH=$(python data_process.py \
+        --dataset ${dataset} \
+        --historical_window ${historical_window} \
+        --audio_description ${audio_description} \
+        --audio_impression ${audio_impression} \
+        --audio_only ${audio_only} \
+        --audio_context ${audio_context} \
+        --experiments_setting ${Experiments_setting} \
+        --include_persona ${include_persona} \
+        --persona_path ${persona_path})
+
+    echo "******************************************************************************************"
+    echo "Data processing has executed successfully!"
+    echo "Processed Data_Path: ${DATA_PATH}"
+    echo "******************************************************************************************"
+
+
+    if [ ${dataset} = 'iemocap' ]
+    then
+        # 先用 2048 跑通流程，避免 A5000 24GB OOM
+        MAX_LENGTH=2600
+    elif [ ${dataset} = 'meld' ]
+    then
+        MAX_LENGTH=1500
+    else
+        echo "Dataset is not supported."
+        exit 1
+    fi
+
+    echo "******************************************************************************************"
+    echo "Dataset: ${dataset}"
+    echo "Max context length: ${MAX_LENGTH}"
+    echo "Model path: ${MODEL_PATH}"
+    echo "******************************************************************************************"
+
+
+    if [ ${Experiments_setting} = 'zero_shot' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=False
+        LORA=False
+        LR=0
+    elif [ ${Experiments_setting} = 'few_shot' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=False
+        LORA=False
+        LR=0
+    elif [ ${Experiments_setting} = 'lora' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=True
+        LORA=True
+        LR=${LORA_LR}
+    elif [ ${Experiments_setting} = 'all_parameters' ]
+    then
+        DO_EVAL=True
+        DO_TRAIN=True
+        LORA=False
+        LR=2e-5
+    else
+        echo "Invalid experiment setting."
+        exit 1
+    fi
+
+
+    OUTPUT_DIR="../experiments/${MODEL_NAME}/${Experiments_setting}/${dataset}/window_${historical_window}/LR_${LR}_BS_${BS}_per_${data_percent}_${task}_class5_${SEED}_single_gpu_e15"
+
+    echo "******************************************************************************************"
+    echo "Start running main.py without DeepSpeed"
+    echo "Batch size: ${BS}"
+    echo "Gradient accumulation steps: ${accumulations}"
+    echo "Epochs: ${num_train_epochs}"
+    echo "Output dir: ${OUTPUT_DIR}"
+    echo "******************************************************************************************"
+
+
+    python main.py \
+        --dataset ${dataset} \
+        --model_name_or_path ${MODEL_PATH} \
+        --data_dir ${DATA_PATH} \
+        --output_dir ${OUTPUT_DIR} \
+        --max_length ${MAX_LENGTH} \
+        --batch_size ${BS} \
+        --gradient_accumulation_steps ${accumulations} \
+        --eval_batch_size 1 \
+        --num_train_epochs ${num_train_epochs} \
+        --save_steps 100000 \
+        --lora ${LORA} \
+        --learning_rate ${LR} \
+        --do_eval ${DO_EVAL} \
+        --do_train ${DO_TRAIN} \
+        --statistic_mode True \
+        --data_percent ${data_percent} \
+        --seed ${SEED}
+fi
