@@ -55,6 +55,13 @@ def load_conversation_speakers(project_root, dataset):
 
 def build_prompt(dataset, conv_id, speaker_name, utterances):
     utterance_text = '\n'.join(f'- {utterance}' for utterance in utterances if utterance)
+    if dataset == 'meld':
+        scope_note = (
+            'MELD conversations may be short and multi-party. Treat this as a dialogue-local profile, '
+            'not a permanent biography. If evidence is limited, say so. '
+        )
+    else:
+        scope_note = ''
     return (
         'You are creating speaker persona features for emotion recognition in conversation.\n'
         f'Dataset: {dataset}\n'
@@ -62,9 +69,11 @@ def build_prompt(dataset, conv_id, speaker_name, utterances):
         f'Speaker: {speaker_name}\n\n'
         'All utterances from this speaker in this conversation:\n'
         f'{utterance_text}\n\n'
+        f'{scope_note}'
         'Infer the speaker persona using only the utterances above. Focus on stable traits that may help '
         'emotion recognition: role in the conversation, communication style, attitude, relationship cues, '
-        'and recurring behavior. Avoid copying long phrases from the dialogue. Do not predict an emotion label. '
+        'and recurring behavior. Avoid copying long phrases from the dialogue. Do not predict an emotion label, '
+        'do not mention the gold emotion, and do not summarize the target utterance as the answer. '
         'Write 1-2 concise English sentences.'
     )
 
@@ -106,6 +115,15 @@ def generate_profile(model, tokenizer, prompt, max_input_tokens, max_new_tokens)
     return ' '.join(profile.split())
 
 
+def fallback_profile(dataset, min_utterances):
+    if dataset == 'meld':
+        return (
+            f'Limited evidence: this speaker has fewer than {min_utterances} utterances in this dialogue, '
+            'so no reliable dialogue-local persona can be inferred.'
+        )
+    return ''
+
+
 def load_existing_output(output_path, dataset, model_name_or_path):
     if not os.path.exists(output_path):
         return {
@@ -126,16 +144,17 @@ def save_output(output_path, payload):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate offline speaker persona features with a local LLaMA2 model.')
+    parser = argparse.ArgumentParser(description='Generate offline dialogue-level speaker persona features.')
     parser.add_argument('--project_root', type=str, default='..', help='Project root path, e.g. /home/pc/jcy/SpeechCueLLM')
     parser.add_argument('--dataset', type=str, required=True, choices=['iemocap', 'meld'])
-    parser.add_argument('--model_name_or_path', type=str, required=True, help='Local LLaMA2/LLaMA2-chat HuggingFace path')
+    parser.add_argument('--model_name_or_path', type=str, required=True, help='Local HuggingFace causal LM path')
     parser.add_argument('--output_path', type=str, required=True, help='Where to save persona json')
     parser.add_argument('--max_input_tokens', type=int, default=3500)
     parser.add_argument('--max_new_tokens', type=int, default=96)
     parser.add_argument('--device_map', type=str, default='cuda')
     parser.add_argument('--torch_dtype', type=str, default='float16', choices=['float16', 'bfloat16', 'float32'])
     parser.add_argument('--save_every', type=int, default=1)
+    parser.add_argument('--min_utterances', type=int, default=1, help='Use a fallback profile if a speaker has fewer utterances')
     parser.add_argument('--overwrite', action='store_true')
     args = parser.parse_args()
 
@@ -147,10 +166,12 @@ def main():
 
     conversations = load_conversation_speakers(args.project_root, args.dataset)
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        torch_dtype=dtype_map[args.torch_dtype]
-    )
+    model_kwargs = {'torch_dtype': dtype_map[args.torch_dtype]}
+    if args.device_map == 'auto':
+        model_kwargs['device_map'] = 'auto'
+    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+    if args.device_map != 'auto':
+        model.to(args.device_map)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     model.eval()
@@ -164,7 +185,11 @@ def main():
         for speaker_name, utterances in speakers.items():
             if not args.overwrite and profiles[conv_id].get(speaker_name):
                 continue
-            prompt = build_prompt(args.dataset, conv_id, speaker_name, utterances)
+            valid_utterances = [utterance for utterance in utterances if utterance]
+            if len(valid_utterances) < args.min_utterances:
+                profiles[conv_id][speaker_name] = fallback_profile(args.dataset, args.min_utterances)
+                continue
+            prompt = build_prompt(args.dataset, conv_id, speaker_name, valid_utterances)
             profiles[conv_id][speaker_name] = generate_profile(
                 model,
                 tokenizer,

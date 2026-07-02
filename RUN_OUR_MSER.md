@@ -87,6 +87,35 @@ DATASET=meld MODEL_NAME=qwen2.5 bash run_gpu0.sh
 
 Run on GPU 2 by replacing `run_gpu0.sh` with `run_gpu2.sh`.
 
+## Generate MELD Persona
+
+MELD persona is disabled by default. Generate it first if you want to run the persona ablation:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+bash generate_meld_persona_features.sh
+```
+
+The default output is:
+
+```bash
+/home/pc/jcy/Our-MSER/persona_features/meld_llama2_persona.json
+```
+
+The MELD generator uses dialogue-local profiles and defaults to `MIN_UTTERANCES=2`. Speakers with fewer utterances get a limited-evidence profile instead of a confident persona.
+
+After generation, run MELD with persona:
+
+```bash
+DATASET=meld USE_PERSONA=True bash run_gpu0.sh
+```
+
+or:
+
+```bash
+DATASET=meld MODEL_NAME=qwen2.5 USE_PERSONA=True bash run_gpu2.sh
+```
+
 ## Persona Defaults
 
 Defaults:
@@ -103,4 +132,4 @@ USE_PERSONA=False bash run_gpu0.sh
 USE_PERSONA=True PERSONA_PATH=../persona_features/meld_llama2_persona.json DATASET=meld bash run_gpu0.sh
 ```
 
-MELD persona generation is not part of the baseline yet. First run MELD without persona.
+MELD persona is an ablation setting, not the default baseline. First run MELD without persona, then compare with `USE_PERSONA=True`.
