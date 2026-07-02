@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${SCRIPT_DIR}"
 
-MODEL_PATH="${MODEL_PATH:-/home/pc/jcy/models/Llama-2-7b-hf}"
-OUTPUT_PATH="${OUTPUT_PATH:-../persona_features/meld_llama2_persona.json}"
+MODEL_PATH="${MODEL_PATH:-/home/pc/jcy/models/Qwen2.5-7B-Instruct}"
+OUTPUT_PATH="${OUTPUT_PATH:-../persona_features/meld_qwen25_persona.json}"
 
 python generate_persona_features.py \
     --project_root "${PROJECT_ROOT}" \

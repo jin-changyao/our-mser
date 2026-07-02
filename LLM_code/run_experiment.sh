@@ -76,7 +76,15 @@ else
     include_persona="${USE_PERSONA}"
 fi
 
-persona_path="${PERSONA_PATH:-../persona_features/${DATASET}_llama2_persona.json}"
+if [ -z "${PERSONA_PATH+x}" ]; then
+    if [ "${DATASET}" = "meld" ]; then
+        persona_path="../persona_features/meld_qwen25_persona.json"
+    else
+        persona_path="../persona_features/${DATASET}_llama2_persona.json"
+    fi
+else
+    persona_path="${PERSONA_PATH}"
+fi
 if [ "${include_persona}" = "False" ]; then
     persona_path=""
 fi

@@ -96,10 +96,16 @@ cd /home/pc/jcy/Our-MSER/LLM_code
 bash generate_meld_persona_features.sh
 ```
 
+The default generator model is:
+
+```bash
+/home/pc/jcy/models/Qwen2.5-7B-Instruct
+```
+
 The default output is:
 
 ```bash
-/home/pc/jcy/Our-MSER/persona_features/meld_llama2_persona.json
+/home/pc/jcy/Our-MSER/persona_features/meld_qwen25_persona.json
 ```
 
 The MELD generator uses dialogue-local profiles and defaults to `MIN_UTTERANCES=2`. Speakers with fewer utterances get a limited-evidence profile instead of a confident persona.
@@ -129,7 +135,7 @@ Override manually:
 
 ```bash
 USE_PERSONA=False bash run_gpu0.sh
-USE_PERSONA=True PERSONA_PATH=../persona_features/meld_llama2_persona.json DATASET=meld bash run_gpu0.sh
+USE_PERSONA=True PERSONA_PATH=../persona_features/meld_qwen25_persona.json DATASET=meld bash run_gpu0.sh
 ```
 
 MELD persona is an ablation setting, not the default baseline. First run MELD without persona, then compare with `USE_PERSONA=True`.
