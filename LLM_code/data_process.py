@@ -36,7 +36,62 @@ def format_persona_features(persona_features, conv_id):
     return profile_text
 
 
-def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None):
+def label_guidance(dataset):
+    if dataset == 'iemocap':
+        return (
+            'Important label distinctions:\n'
+            '- happy: positive and pleased, but not necessarily energetic.\n'
+            '- excited: positive high-arousal emotion, energetic or enthusiastic.\n'
+            '- angry: direct anger, irritation, or hostility.\n'
+            '- frustrated: blocked, dissatisfied, helpless, or annoyed due to difficulty.\n'
+            '- neutral: no clear emotional intensity.\n'
+            '- sad: sorrow, disappointment, or low mood.'
+        )
+    if dataset == 'meld':
+        return (
+            'Important label distinctions:\n'
+            '- joyful: positive happiness or delight.\n'
+            '- surprise: sudden unexpected reaction, not necessarily positive.\n'
+            '- angry: anger, irritation, or hostility.\n'
+            '- disgust: aversion, dislike, or contempt.\n'
+            '- fear: worry, anxiety, or being scared.\n'
+            '- sad: sorrow, disappointment, or low mood.\n'
+            '- neutral: no clear emotional intensity.'
+        )
+    return ''
+
+
+def build_qwen_chat_prompt(dataset, label_text, context_lines, target_utterance, speech_info, persona_text, use_audio):
+    system_msg = (
+        'You are an expert in emotion recognition in conversation. '
+        'Classify the emotion of the target utterance only. '
+        'Use the dialogue context, the target speaker, and the target speech characteristics if provided. '
+        'Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n'
+        f'{label_guidance(dataset)}'
+    )
+
+    user_parts = [
+        f'Available emotion labels:\n{label_text}',
+        'Dialogue context:\n' + '\n'.join(context_lines),
+        f'Target utterance:\n{target_utterance}',
+    ]
+    if use_audio and speech_info:
+        user_parts.append('Target speech characteristics:\n' + speech_info.strip())
+    if persona_text:
+        user_parts.append('Speaker profiles:\n' + persona_text.replace('Speaker profiles:', '').strip())
+    user_parts.append(
+        'Question:\n'
+        'What is the emotion label of the target utterance? '
+        'Answer with exactly one label from the available labels.'
+    )
+
+    return [
+        {'role': 'system', 'content': system_msg},
+        {'role': 'user', 'content': '\n\n'.join(user_parts)},
+    ]
+
+
+def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None, prompt_style='qwen_chat'):
     '''
     dataset: parameter that define the evaluated dataset.
     window:       parameter that control the historical context window
@@ -101,11 +156,14 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             continue
         temp_conv_turn = 0
         for conv_turn in range(len(sentence_dict[conv_id])):
+            persona_text = format_persona_features(persona_features, conv_id) if include_persona == 'True' else ''
+            speech_info_parts = []
+            context_lines = []
             temp_content_str = 'Now you are expert of sentiment and emotional analysis.'
             temp_content_str += 'The following conversation noted between \'### ###\' involves several speakers. '
 
-            if include_persona == 'True':
-                temp_content_str += format_persona_features(persona_features, conv_id)
+            if persona_text:
+                temp_content_str += persona_text
 
             if audio_context == 'True':
                 temp_content_str += 'The last three utterances are followed by its speech features. ### '
@@ -120,6 +178,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 sub_sent = sub_sent.replace('', "")
                 sub_sent = sub_sent.replace('', " ")
                 sub_sent = sub_sent.replace('', " ")
+                context_lines.append(f'Speaker_{speaker_label}: "{sub_sent}"')
                 temp_content_str += (f'\t Speaker_{speaker_label}:"{sub_sent}"')
                 if audio_context == 'True':
                     if index_w+i<conv_turn-3:
@@ -206,8 +265,10 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 if duration > 0.5:
                     if audio_description == 'True':
                         temp_content_str += f' {description}'
+                        speech_info_parts.append(str(description))
                     if audio_impression == 'True':
                         temp_content_str += f' {impression}'
+                        speech_info_parts.append(str(impression))
             elif dataset == 'iemocap':
                 target_sentence = target_utterance.split(':')[1][1:-1]
                 filtered_rows = audio_feature.loc[(audio_feature['video_id'] == conv_id) & (audio_feature['text'] == target_sentence)]
@@ -218,8 +279,10 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 audio_path_dict[f'{conv_id}_{conv_turn}'] = audio_directory + '/' + audio_path
                 if audio_description == 'True':
                     temp_content_str += f' {description}'
+                    speech_info_parts.append(str(description))
                 if audio_impression == 'True':
                     temp_content_str += f' {impression}'
+                    speech_info_parts.append(str(impression))
             ##-------------------------------------------------------
             if experiments_setting != 'zero_shot':
                 if audio_only == 'True':
@@ -238,8 +301,19 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                     temp_content_str += f' Please select the emotional label of <{target_utterance}> based on the context. Please output ONLY ONE label from <{label_text_set[dataset]}> as the first word without any other words: '
                     temp_content_str += f' Please select the emotional label of <{target_utterance}> based on the context. Please output ONLY ONE label from <{label_text_set[dataset]}> as the first word without any other words:'
             length.append(len(temp_content_str))
-            
-            content_task_dict[f'{conv_id}_{conv_turn}'] = temp_content_str
+
+            if prompt_style == 'qwen_chat':
+                content_task_dict[f'{conv_id}_{conv_turn}'] = build_qwen_chat_prompt(
+                    dataset=dataset,
+                    label_text=label_text_set[dataset],
+                    context_lines=context_lines,
+                    target_utterance=target_utterance,
+                    speech_info=' '.join(speech_info_parts),
+                    persona_text=persona_text,
+                    use_audio=(audio_description == 'True' or audio_impression == 'True' or audio_only == 'True'),
+                )
+            else:
+                content_task_dict[f'{conv_id}_{conv_turn}'] = temp_content_str
 
 
     if dataset == 'iemocap':
@@ -265,7 +339,8 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
 
     # dataset_list = ['train', 'test', 'valid']
     persona_tag = '_persona' if include_persona == 'True' else ''
-    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}'
+    prompt_tag = f'_{prompt_style}' if prompt_style else ''
+    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}{prompt_tag}'
     os.makedirs(data_path, exist_ok=True)
 
     with open(f'{data_path}/train.json', 'w') as f_train:
@@ -273,19 +348,19 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             if train_id.split('_')[0]=='125':
                 continue
             f_train.write(json.dumps({'path': audio_path_dict[train_id], \
-            'input':f'{content_task_dict[train_id]}','target':f'{content_target_dict[train_id]}'}, ensure_ascii=False)+ '\n')
+            'input':content_task_dict[train_id],'target':f'{content_target_dict[train_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/test.json', 'w') as f_test:
         for test_id in new_test_id:
             f_test.write(json.dumps({'path': audio_path_dict[test_id],\
-            'input':f'{content_task_dict[test_id]}','target':f'{content_target_dict[test_id]}'}, ensure_ascii=False)+ '\n')
+            'input':content_task_dict[test_id],'target':f'{content_target_dict[test_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/valid.json', 'w') as f_valid:
         for valid_id in new_valid_id:
             if valid_id.split('_')[0]=='1149':
                 continue
             f_valid.write(json.dumps({'path': audio_path_dict[valid_id], \
-            'input':f'{content_task_dict[valid_id]}','target':f'{content_target_dict[valid_id]}'}, ensure_ascii=False)+ '\n')
+            'input':content_task_dict[valid_id],'target':f'{content_target_dict[valid_id]}'}, ensure_ascii=False)+ '\n')
     
         
     # draw histogram of the length of the input text
@@ -308,6 +383,7 @@ parser.add_argument('--audio_context', type=str, default='False', help='Audio co
 parser.add_argument('--experiments_setting', type=str, default='lora', help='Experiments setting type')
 parser.add_argument('--include_persona', type=str, default='False', help='Whether to add offline speaker persona features to prompts')
 parser.add_argument('--persona_path', type=str, default=None, help='Path to offline speaker persona feature json')
+parser.add_argument('--prompt_style', type=str, default='qwen_chat', choices=['legacy', 'qwen_chat'], help='Prompt format style')
 args = parser.parse_args()
 
 
@@ -317,6 +393,6 @@ args = parser.parse_args()
 processed_data_path = process_dataset(dataset=args.dataset, window=args.historical_window
         , audio_description=args.audio_description, audio_impression=args.audio_impression, 
         audio_only=args.audio_only, audio_context=args.audio_context, experiments_setting=args.experiments_setting,
-        include_persona=args.include_persona, persona_path=args.persona_path)
+        include_persona=args.include_persona, persona_path=args.persona_path, prompt_style=args.prompt_style)
 
 print(processed_data_path)

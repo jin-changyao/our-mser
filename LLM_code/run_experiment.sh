@@ -18,6 +18,7 @@ audio_description="${AUDIO_DESCRIPTION:-True}"
 audio_impression="${AUDIO_IMPRESSION:-False}"
 audio_context="${AUDIO_CONTEXT:-False}"
 audio_only="${AUDIO_ONLY:-False}"
+prompt_style="${PROMPT_STYLE:-qwen_chat}"
 
 SEED="${SEED:-1}"
 num_train_epochs="${NUM_TRAIN_EPOCHS:-15}"
@@ -117,6 +118,9 @@ fi
 if [ "${include_persona}" = "True" ]; then
     task="${task}_persona"
 fi
+if [ "${prompt_style}" != "legacy" ]; then
+    task="${task}_${prompt_style}"
+fi
 
 echo "******************************************************************************************"
 echo "Our-MSER experiment"
@@ -134,6 +138,7 @@ echo "Max context length: ${MAX_LENGTH}"
 echo "Audio description: ${audio_description}"
 echo "Audio impression: ${audio_impression}"
 echo "Audio context: ${audio_context}"
+echo "Prompt style: ${prompt_style}"
 echo "Include persona: ${include_persona}"
 echo "Persona path: ${persona_path}"
 echo "Data percent: ${data_percent}"
@@ -148,7 +153,8 @@ DATA_PATH=$(python data_process.py \
     --audio_context "${audio_context}" \
     --experiments_setting "${Experiments_setting}" \
     --include_persona "${include_persona}" \
-    --persona_path "${persona_path}")
+    --persona_path "${persona_path}" \
+    --prompt_style "${prompt_style}")
 
 echo "******************************************************************************************"
 echo "Data processing has executed successfully!"

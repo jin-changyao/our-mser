@@ -67,6 +67,13 @@ Default model is Qwen2.5. IEMOCAP + Qwen2.5 + speech description + persona:
 bash run_gpu0.sh
 ```
 
+The default prompt style is `qwen_chat`, which renders each sample with the
+model tokenizer's chat template. To run the old prompt format for comparison:
+
+```bash
+PROMPT_STYLE=legacy bash run_gpu0.sh
+```
+
 IEMOCAP + LLaMA2 + speech description + persona:
 
 ```bash

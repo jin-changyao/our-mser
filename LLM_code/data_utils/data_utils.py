@@ -81,6 +81,27 @@ class Seq2SeqDataset(Dataset):
     def __getitem__(self, index):
         return self.examples[index]
 
+
+def render_chat_input(example_input, tokenizer):
+    if isinstance(example_input, list):
+        if hasattr(tokenizer, 'apply_chat_template') and tokenizer.chat_template:
+            return tokenizer.apply_chat_template(
+                example_input,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+        rendered = []
+        for message in example_input:
+            rendered.append(f"{message.get('role', 'user')}: {message.get('content', '')}")
+        rendered.append('assistant:')
+        return '\n'.join(rendered)
+    return example_input
+
+
+def render_chat_inputs(example_inputs, tokenizer):
+    return [render_chat_input(example_input, tokenizer) for example_input in example_inputs]
+
+
 class Seq2SeqCollator(object):
     def __init__(self, args, tokenizer, mode="train"):
         self.tokenizer = tokenizer
@@ -91,7 +112,7 @@ class Seq2SeqCollator(object):
 
     def __call__(self, batch):
         if self.mode == "dev":
-            inputs = [d[0] for d in batch]     
+            inputs = render_chat_inputs([d[0] for d in batch], self.tokenizer)
             inputs = self.tokenizer(inputs, max_length=self.args.max_length, truncation=True, padding=True, return_tensors='pt')
         else:
             inputs = preprocess_data_batch(batch, self.tokenizer, self.args)
@@ -130,7 +151,7 @@ class Seq2SeqCollator(object):
 
 def preprocess_data_batch(data, tokenizer, args):
     
-    inputs = [d[0] for d in data]
+    inputs = render_chat_inputs([d[0] for d in data], tokenizer)
     inputs_pred = None
     targets = [d[1] for d in data]
 
@@ -209,6 +230,7 @@ class ModelArgs:
     weight_decay: float = 0.0
     max_seq_length: int = 96
     max_length: int = 32
+    max_new_tokens: int = 10
     num_beams: int = 1
     do_sample: bool = False
     top_k: int = None

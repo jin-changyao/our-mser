@@ -248,6 +248,11 @@ parser.add_argument(
     help="Max output seq length",
 )
 parser.add_argument(
+    "--max_new_tokens",
+    default=10, type=int,
+    help="Max new tokens generated during evaluation.",
+)
+parser.add_argument(
     '--weight_decay',
     default=0.0, type=float,
     help='weight decay when updating parameters.'
@@ -427,6 +432,7 @@ model_args = {
     "save_steps": args.save_steps,
     "output_dir": args.output_dir,
     "max_length": args.max_length,
+    "max_new_tokens": args.max_new_tokens,
     "warmup_ratio": args.warmup_ratio,
     "warmup_steps": args.warmup_steps,
     "weight_decay": args.weight_decay,
@@ -740,6 +746,7 @@ if __name__ == "__main__":
             eval_sampler = SequentialSampler(dev_dataset)
             eval_dataloader = DataLoader(dev_dataset, batch_size=args.eval_batch_size, sampler=eval_sampler, collate_fn=dev_collator, num_workers=8)
             all_outputs = []
+            all_prompt_lengths = []
 
             preds_for_eval_path = os.path.join(args.output_dir, f"preds_for_eval_{epoch}.text")
             print("\n*****    Evaluating  *****\n")
@@ -747,6 +754,7 @@ if __name__ == "__main__":
             for eval_step, eval_batch in enumerate(tqdm(eval_dataloader)):
                 eval_batch = eval_batch.to(device)
                 eval_inputs_iter.extend(eval_batch["input_ids"])
+                all_prompt_lengths.extend([eval_batch["input_ids"].size(-1)] * eval_batch["input_ids"].size(0))
                 max_length_this_batch = eval_batch["input_ids"].size(-1) if args.model_type == "decoder" else 0
                 with torch.no_grad():
                     if "chatglm" in args.model_name_or_path:
@@ -768,8 +776,7 @@ if __name__ == "__main__":
                             top_k=args.top_k,
                             top_p=args.top_p,
                             early_stopping=True,
-                            # max_length=max_length_this_batch + args.max_length,
-                            max_length=args.max_length,
+                            max_new_tokens=args.max_new_tokens,
                             length_penalty=0.1,
                             repetition_penalty=1.0,
                             num_return_sequences=1
@@ -785,11 +792,11 @@ if __name__ == "__main__":
             for index, o in enumerate(outs):
                 this_input = eval_inputs_iter[index]
                 if args.model_type == "decoder":
-                    if this_input in o:
+                    prompt_length = all_prompt_lengths[index] if index < len(all_prompt_lengths) else args.max_seq_length
+                    output_ids = all_outputs[index][prompt_length: ]
+                    answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                    if not answer.strip() and this_input in o:
                         answer = o.replace(this_input, "").strip().rstrip()
-                    else:
-                        output_ids = all_outputs[index][args.max_seq_length: ]
-                        answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                 else:
                     answer = o
                 answer = answer.strip().rstrip()
@@ -861,6 +868,7 @@ if __name__ == "__main__":
         eval_sampler = SequentialSampler(dev_dataset)
         eval_dataloader = DataLoader(dev_dataset, batch_size=args.eval_batch_size, sampler=eval_sampler, collate_fn=dev_collator, num_workers=8)
         all_outputs = []
+        all_prompt_lengths = []
 
         preds_for_eval_path = os.path.join(args.output_dir, f"preds_for_eval.text")
         print("\n*****    Evaluating  *****\n")
@@ -868,6 +876,7 @@ if __name__ == "__main__":
         for eval_step, eval_batch in enumerate(tqdm(eval_dataloader)):
             eval_batch = eval_batch.to(device)
             eval_inputs_iter.extend(eval_batch["input_ids"])
+            all_prompt_lengths.extend([eval_batch["input_ids"].size(-1)] * eval_batch["input_ids"].size(0))
             max_length_this_batch = eval_batch["input_ids"].size(-1) if args.model_type == "decoder" else 0
             with torch.no_grad():
                 if "chatglm" in args.model_name_or_path:
@@ -890,7 +899,7 @@ if __name__ == "__main__":
                         top_p=args.top_p,
                         # early_stopping=True,
                         # max_length=max_length_this_batch + args.max_length,
-                        max_new_tokens=5,
+                        max_new_tokens=args.max_new_tokens,
                         #length_penalty=0.1,
                         repetition_penalty=1.0,
                         num_return_sequences=1
@@ -906,11 +915,11 @@ if __name__ == "__main__":
         for index, o in enumerate(outs):
             this_input = eval_inputs_iter[index]
             if args.model_type == "decoder":
-                if this_input in o:
+                prompt_length = all_prompt_lengths[index] if index < len(all_prompt_lengths) else args.max_seq_length
+                output_ids = all_outputs[index][prompt_length: ]
+                answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                if not answer.strip() and this_input in o:
                     answer = o.replace(this_input, "").strip().rstrip()
-                else:
-                    output_ids = all_outputs[index][args.max_seq_length: ]
-                    answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             else:
                 answer = o
             answer = answer.strip().rstrip()
