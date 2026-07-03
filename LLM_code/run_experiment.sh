@@ -29,6 +29,8 @@ BS="${BATCH_SIZE:-8}"
 accumulations="${GRADIENT_ACCUMULATION_STEPS:-8}"
 historical_window="${HISTORICAL_WINDOW:-12}"
 data_percent="${DATA_PERCENT:-1.0}"
+REPROCESS_DATA="${REPROCESS_DATA:-False}"
+PREPROCESS_ONLY="${PREPROCESS_ONLY:-False}"
 
 MODELS_ROOT="${MODELS_ROOT:-/home/pc/jcy/models}"
 
@@ -142,24 +144,45 @@ echo "Prompt style: ${prompt_style}"
 echo "Include persona: ${include_persona}"
 echo "Persona path: ${persona_path}"
 echo "Data percent: ${data_percent}"
+echo "Reprocess data: ${REPROCESS_DATA}"
+echo "Preprocess only: ${PREPROCESS_ONLY}"
 echo "******************************************************************************************"
 
-DATA_PATH=$(python data_process.py \
-    --dataset "${DATASET}" \
-    --historical_window "${historical_window}" \
-    --audio_description "${audio_description}" \
-    --audio_impression "${audio_impression}" \
-    --audio_only "${audio_only}" \
-    --audio_context "${audio_context}" \
-    --experiments_setting "${Experiments_setting}" \
-    --include_persona "${include_persona}" \
-    --persona_path "${persona_path}" \
-    --prompt_style "${prompt_style}")
+persona_tag=""
+if [ "${include_persona}" = "True" ]; then
+    persona_tag="_persona"
+fi
+prompt_tag=""
+if [ -n "${prompt_style}" ]; then
+    prompt_tag="_${prompt_style}"
+fi
+DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}"
+
+if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ ! -f "${DATA_PATH}/test.json" ] || [ ! -f "${DATA_PATH}/valid.json" ]; then
+    DATA_PATH=$(python data_process.py \
+        --dataset "${DATASET}" \
+        --historical_window "${historical_window}" \
+        --audio_description "${audio_description}" \
+        --audio_impression "${audio_impression}" \
+        --audio_only "${audio_only}" \
+        --audio_context "${audio_context}" \
+        --experiments_setting "${Experiments_setting}" \
+        --include_persona "${include_persona}" \
+        --persona_path "${persona_path}" \
+        --prompt_style "${prompt_style}")
+    DATA_ACTION="generated"
+else
+    DATA_ACTION="reused"
+fi
 
 echo "******************************************************************************************"
-echo "Data processing has executed successfully!"
+echo "Processed data ${DATA_ACTION} successfully!"
 echo "Processed Data_Path: ${DATA_PATH}"
 echo "******************************************************************************************"
+
+if [ "${PREPROCESS_ONLY}" = "True" ]; then
+    exit 0
+fi
 
 if [ "${Experiments_setting}" = "zero_shot" ]; then
     DO_EVAL=True

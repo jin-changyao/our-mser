@@ -74,6 +74,21 @@ model tokenizer's chat template. To run the old prompt format for comparison:
 PROMPT_STYLE=legacy bash run_gpu0.sh
 ```
 
+Processed data is reused by default once the matching
+`PROCESSED_DATASET/.../train.json`, `test.json`, and `valid.json` files exist.
+To generate the default IEMOCAP + Qwen-chat data once before training:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+PREPROCESS_ONLY=True REPROCESS_DATA=True bash run_gpu0.sh
+```
+
+After that, normal runs reuse the processed files. To force regeneration:
+
+```bash
+REPROCESS_DATA=True bash run_gpu0.sh
+```
+
 IEMOCAP + LLaMA2 + speech description + persona:
 
 ```bash
