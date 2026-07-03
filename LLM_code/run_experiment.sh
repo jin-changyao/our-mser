@@ -10,7 +10,7 @@ cd "${SCRIPT_DIR}"
 
 FLAG=1
 
-MODEL_NAME="${MODEL_NAME:-llama2}"
+MODEL_NAME="${MODEL_NAME:-qwen2.5}"
 DATASET="${DATASET:-iemocap}"
 Experiments_setting="${EXPERIMENTS_SETTING:-lora}"
 

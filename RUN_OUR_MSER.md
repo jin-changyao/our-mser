@@ -61,28 +61,28 @@ GPU 0 uses `MASTER_PORT=29500`; GPU 2 uses `MASTER_PORT=29502`.
 
 ## Common Runs
 
-IEMOCAP + LLaMA2 + speech description + persona:
+Default model is Qwen2.5. IEMOCAP + Qwen2.5 + speech description + persona:
 
 ```bash
 bash run_gpu0.sh
 ```
 
-IEMOCAP + Qwen2.5 + speech description + persona:
+IEMOCAP + LLaMA2 + speech description + persona:
 
 ```bash
-MODEL_NAME=qwen2.5 bash run_gpu0.sh
-```
-
-MELD + LLaMA2 + speech description, no persona:
-
-```bash
-DATASET=meld bash run_gpu0.sh
+MODEL_NAME=llama2 bash run_gpu0.sh
 ```
 
 MELD + Qwen2.5 + speech description, no persona:
 
 ```bash
-DATASET=meld MODEL_NAME=qwen2.5 bash run_gpu0.sh
+DATASET=meld bash run_gpu0.sh
+```
+
+MELD + LLaMA2 + speech description, no persona:
+
+```bash
+DATASET=meld MODEL_NAME=llama2 bash run_gpu0.sh
 ```
 
 Run on GPU 2 by replacing `run_gpu0.sh` with `run_gpu2.sh`.
