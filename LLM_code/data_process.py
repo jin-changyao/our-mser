@@ -9,15 +9,6 @@ except ImportError:
     plt = None
 
 
-IEMOCAP_SPEAKER_NAMES = {
-    "Ses01": {"F": "Mary", "M": "James"},
-    "Ses02": {"F": "Patricia", "M": "John"},
-    "Ses03": {"F": "Jennifer", "M": "Robert"},
-    "Ses04": {"F": "Linda", "M": "Michael"},
-    "Ses05": {"F": "Elizabeth", "M": "William"},
-}
-
-
 def clean_utterance_text(text):
     text = str(text)
     replacements = {
@@ -75,9 +66,11 @@ def load_prc_dialogs(dataset, prc_data_dir=None):
 
 
 def iemocap_speaker_name(conv_id, gender):
-    session = str(conv_id)[:5]
-    fallback = f'Speaker_{0 if gender == "M" else 1}'
-    return IEMOCAP_SPEAKER_NAMES.get(session, {}).get(gender, fallback)
+    if gender == "M":
+        return "Male Speaker"
+    if gender == "F":
+        return "Female Speaker"
+    return f"Speaker_{gender}"
 
 
 def filter_iemocap_rows_by_text(df, conv_id, text):
