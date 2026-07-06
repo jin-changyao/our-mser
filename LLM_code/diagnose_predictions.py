@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 
 LABELS = {
     "iemocap": ["happy", "sad", "neutral", "angry", "excited", "frustrated"],
-    "meld": ["neutral", "surprise", "fear", "sad", "joyful", "disgust", "angry"],
+    "meld": ["neutral", "surprise", "fear", "sadness", "joy", "disgust", "anger"],
 }
 
 PROMPT_MARKERS = [

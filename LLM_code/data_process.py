@@ -3,7 +3,93 @@ import pickle
 import json
 import os 
 import pandas as pd
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    plt = None
+
+
+IEMOCAP_SPEAKER_NAMES = {
+    "Ses01": {"F": "Mary", "M": "James"},
+    "Ses02": {"F": "Patricia", "M": "John"},
+    "Ses03": {"F": "Jennifer", "M": "Robert"},
+    "Ses04": {"F": "Linda", "M": "Michael"},
+    "Ses05": {"F": "Elizabeth", "M": "William"},
+}
+
+
+def clean_utterance_text(text):
+    text = str(text)
+    replacements = {
+        '聮': "'",
+        '聭': "",
+        '聯': "",
+        '聰': "",
+        '聴': " ",
+        '聟': " ",
+        '\x92': "'",
+        '’': "'",
+        '‘': "'",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return ' '.join(text.split())
+
+
+def resolve_prc_data_dir(prc_data_dir):
+    candidates = []
+    if prc_data_dir:
+        candidates.append(prc_data_dir)
+    candidates.extend([
+        '../prc_data',
+        '../../PRC-Emo-code/data',
+        '../../PRC-Emo/data',
+        '/home/pc/jcy/PRC-Emo/data',
+        '/home/pc/jcy/PRC-Emo-code/data',
+    ])
+    for candidate in candidates:
+        if candidate and os.path.isdir(candidate):
+            return candidate
+    return None
+
+
+def load_prc_dialogs(dataset, prc_data_dir=None):
+    data_dir = resolve_prc_data_dir(prc_data_dir)
+    if data_dir is None:
+        return None
+
+    dialogs = {}
+    split_ids = {}
+    for split in ['train', 'test', 'valid']:
+        path = os.path.join(data_dir, f'{dataset}.{split}.json')
+        if not os.path.isfile(path):
+            return None
+        with open(path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        split_ids[split] = []
+        for conv_id, conv in payload.items():
+            normalized_id = int(conv_id) if dataset == 'meld' else conv_id
+            dialogs[normalized_id] = conv
+            split_ids[split].append(normalized_id)
+    return dialogs, split_ids, data_dir
+
+
+def iemocap_speaker_name(conv_id, gender):
+    session = str(conv_id)[:5]
+    fallback = f'Speaker_{0 if gender == "M" else 1}'
+    return IEMOCAP_SPEAKER_NAMES.get(session, {}).get(gender, fallback)
+
+
+def filter_iemocap_rows_by_text(df, conv_id, text):
+    filtered_rows = df.loc[(df['video_id'] == conv_id) & (df['text'] == text)]
+    if not filtered_rows.empty:
+        return filtered_rows
+
+    conv_rows = df.loc[df['video_id'] == conv_id].copy()
+    if conv_rows.empty:
+        return conv_rows
+    normalized_text = clean_utterance_text(text)
+    return conv_rows.loc[conv_rows['text'].apply(clean_utterance_text) == normalized_text]
 
 
 def load_persona_features(persona_path):
@@ -16,7 +102,7 @@ def load_persona_features(persona_path):
     return payload
 
 
-def format_persona_features(persona_features, conv_id):
+def format_persona_features(persona_features, conv_id, speaker_name_map=None):
     profiles = persona_features.get(str(conv_id), {})
     if not profiles:
         return ''
@@ -24,6 +110,8 @@ def format_persona_features(persona_features, conv_id):
     normalized_profiles = {}
     for speaker_key, profile in profiles.items():
         speaker_name = speaker_key if str(speaker_key).startswith('Speaker_') else f'Speaker_{speaker_key}'
+        if speaker_name_map and speaker_name in speaker_name_map:
+            speaker_name = speaker_name_map[speaker_name]
         if isinstance(profile, str) and profile.strip():
             normalized_profiles[speaker_name] = profile.strip()
 
@@ -50,12 +138,12 @@ def label_guidance(dataset):
     if dataset == 'meld':
         return (
             'Important label distinctions:\n'
-            '- joyful: positive happiness or delight.\n'
+            '- joy: positive happiness or delight.\n'
             '- surprise: sudden unexpected reaction, not necessarily positive.\n'
-            '- angry: anger, irritation, or hostility.\n'
+            '- anger: anger, irritation, or hostility.\n'
             '- disgust: aversion, dislike, or contempt.\n'
             '- fear: worry, anxiety, or being scared.\n'
-            '- sad: sorrow, disappointment, or low mood.\n'
+            '- sadness: sorrow, disappointment, or low mood.\n'
             '- neutral: no clear emotional intensity.'
         )
     return ''
@@ -91,7 +179,7 @@ def build_qwen_chat_prompt(dataset, label_text, context_lines, target_utterance,
     ]
 
 
-def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None, prompt_style='qwen_chat'):
+def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None, prompt_style='qwen_chat', data_format='prc', prc_data_dir=None):
     '''
     dataset: parameter that define the evaluated dataset.
     window:       parameter that control the historical context window
@@ -101,11 +189,11 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     '''
     label_set = {
         'iemocap':['happy', 'sad', 'neutral', 'angry', 'excited', 'frustrated'],
-        'meld':   ['neutral', 'surprise', 'fear', 'sad', 'joyful', 'disgust', 'angry'],
+        'meld':   ['neutral', 'surprise', 'fear', 'sadness', 'joy', 'disgust', 'anger'] if data_format == 'prc' else ['neutral', 'surprise', 'fear', 'sad', 'joyful', 'disgust', 'angry'],
     }
     label_text_set = {
         'iemocap':'happy, sad, neutral, angry, excited, frustrated',
-        'meld'   :'neutral, surprise, fear, sad, joyful, disgust, angry',
+        'meld'   :'neutral, surprise, fear, sadness, joy, disgust, anger' if data_format == 'prc' else 'neutral, surprise, fear, sad, joyful, disgust, angry',
     }
 
     ## load audio feature files
@@ -122,32 +210,62 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     content_target_dict = {}
     content_task_dict = {}
     speaker_label_dict = {}
+    speaker_name_dict = {}
+    speaker_name_map_dict = {}
     sentence_dict = {}
     audio_path_dict = {}
     length = []
     data = pickle.load(open(f'../original_data/{dataset}/{dataset}.pkl','rb'))
     persona_features = load_persona_features(persona_path) if include_persona == 'True' else {}
+    prc_payload = load_prc_dialogs(dataset, prc_data_dir) if data_format == 'prc' else None
 
     if dataset == 'iemocap':
-        all_conv_id = data[3] + data[4] + data[5]
-        sentence_dict = data[2]
+        if prc_payload:
+            prc_dialogs, prc_splits, used_prc_data_dir = prc_payload
+            all_conv_id = prc_splits['train'] + prc_splits['test'] + prc_splits['valid']
+            sentence_dict = {conv_id: prc_dialogs[conv_id]['sentences'] for conv_id in all_conv_id}
+            label_dict = {conv_id: prc_dialogs[conv_id]['labels'] for conv_id in all_conv_id}
+            gender_dict = {conv_id: prc_dialogs[conv_id]['genders'] for conv_id in all_conv_id}
+        else:
+            all_conv_id = data[3] + data[4] + data[5]
+            sentence_dict = data[2]
+            label_dict = data[1]
+            gender_dict = data[0]
         for conv_id in all_conv_id:
             temp_speaker_list = []
-            for speaker_label in data[0][conv_id]:
+            temp_speaker_names = []
+            for speaker_label in gender_dict[conv_id]:
                 if speaker_label == 'M':
                     temp_speaker_list.append(0)
                 else:
                     temp_speaker_list.append(1)
+                temp_speaker_names.append(iemocap_speaker_name(conv_id, speaker_label) if data_format == 'prc' else f'Speaker_{temp_speaker_list[-1]}')
             speaker_label_dict[conv_id] = temp_speaker_list
+            speaker_name_dict[conv_id] = temp_speaker_names
+            speaker_name_map_dict[conv_id] = {f'Speaker_{idx}': name for idx, name in zip(temp_speaker_list, temp_speaker_names)}
 
     elif dataset == 'meld':
-        all_conv_id = data[4] + data[5] + data[6]
-        sentence_dict = data[3]
+        if prc_payload:
+            prc_dialogs, prc_splits, used_prc_data_dir = prc_payload
+            all_conv_id = prc_splits['train'] + prc_splits['test'] + prc_splits['valid']
+            sentence_dict = {conv_id: prc_dialogs[conv_id]['sentences'] for conv_id in all_conv_id}
+            label_dict = {conv_id: prc_dialogs[conv_id]['labels'] for conv_id in all_conv_id}
+        else:
+            all_conv_id = data[4] + data[5] + data[6]
+            sentence_dict = data[3]
+            label_dict = data[1]
         for conv_id in all_conv_id:
             temp_speaker_list = []
-            for speaker_label in data[0][conv_id]:
+            temp_speaker_names = []
+            for turn_index, speaker_label in enumerate(data[0][conv_id]):
                 temp_speaker_list.append(speaker_label.index(1))
+                if prc_payload and 'speakers' in prc_dialogs[conv_id]:
+                    temp_speaker_names.append(prc_dialogs[conv_id]['speakers'][turn_index])
+                else:
+                    temp_speaker_names.append(f'Speaker_{speaker_label.index(1)}')
             speaker_label_dict[conv_id] = temp_speaker_list
+            speaker_name_dict[conv_id] = temp_speaker_names
+            speaker_name_map_dict[conv_id] = {f'Speaker_{idx}': name for idx, name in zip(temp_speaker_list, temp_speaker_names)}
 
     # Process the utterances in the conversation, where 'index_w' is used to handle the starting index under the window size setting.
     
@@ -156,7 +274,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             continue
         temp_conv_turn = 0
         for conv_turn in range(len(sentence_dict[conv_id])):
-            persona_text = format_persona_features(persona_features, conv_id) if include_persona == 'True' else ''
+            persona_text = format_persona_features(persona_features, conv_id, speaker_name_map_dict.get(conv_id, {})) if include_persona == 'True' else ''
             speech_info_parts = []
             context_lines = []
             temp_content_str = 'Now you are expert of sentiment and emotional analysis.'
@@ -171,20 +289,20 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 temp_content_str += ' ### '
 
             index_w = max(conv_turn-window, 0)
-            for i, (speaker_label, sub_sent) in enumerate(zip(speaker_label_dict[conv_id][index_w:conv_turn+1], sentence_dict[conv_id][index_w:conv_turn+1])):
+            for i, (speaker_label, speaker_name, sub_sent) in enumerate(zip(speaker_label_dict[conv_id][index_w:conv_turn+1], speaker_name_dict[conv_id][index_w:conv_turn+1], sentence_dict[conv_id][index_w:conv_turn+1])):
                 sub_sent = sub_sent.replace('', "'")
                 sub_sent = sub_sent.replace('', "")
                 sub_sent = sub_sent.replace('', "")
                 sub_sent = sub_sent.replace('', "")
                 sub_sent = sub_sent.replace('', " ")
                 sub_sent = sub_sent.replace('', " ")
-                context_lines.append(f'Speaker_{speaker_label}: "{sub_sent}"')
-                temp_content_str += (f'\t Speaker_{speaker_label}:"{sub_sent}"')
+                context_lines.append(f'{speaker_name}: "{sub_sent}"')
+                temp_content_str += (f'\t {speaker_name}:"{sub_sent}"')
                 if audio_context == 'True':
                     if index_w+i<conv_turn-3:
                         continue
                     if dataset == 'iemocap':
-                        filtered_rows = audio_feature.loc[(audio_feature['video_id'] == conv_id) & (audio_feature['text'] == sub_sent)]
+                        filtered_rows = filter_iemocap_rows_by_text(audio_feature, conv_id, sub_sent)
                         avg_intensity = filtered_rows['avg_intensity_category'].values[0]
                         intensity_variation = filtered_rows['intensity_variation_category'].values[0]
                         avg_pitch = filtered_rows['avg_pitch_category'].values[0]
@@ -218,8 +336,9 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                         #temp_content_str += f' ({avg_intensity} volume with {intensity_variation} variation)'
                         #temp_content_str += f' ({description})'
                         temp_content_str += f' ({avg_pitch} pitch with {pitch_variation} variation)'
-            content_target_dict[f'{conv_id}_{conv_turn}'] = label_set[dataset][data[1][conv_id][conv_turn]]
-            target_utterance = temp_content_str.split('\t')[-1].split(' (')[0]
+            content_target_dict[f'{conv_id}_{conv_turn}'] = label_set[dataset][label_dict[conv_id][conv_turn]]
+            target_utterance = context_lines[-1]
+            target_sentence = clean_utterance_text(sentence_dict[conv_id][conv_turn])
             temp_content_str += ' ###'
             
             if audio_only == 'True':
@@ -270,11 +389,11 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                         temp_content_str += f' {impression}'
                         speech_info_parts.append(str(impression))
             elif dataset == 'iemocap':
-                target_sentence = target_utterance.split(':')[1][1:-1]
-                filtered_rows = audio_feature.loc[(audio_feature['video_id'] == conv_id) & (audio_feature['text'] == target_sentence)]
+                filtered_rows = filter_iemocap_rows_by_text(audio_feature, conv_id, target_sentence)
                 description = filtered_rows['description'].values[0]
                 impression = filtered_rows['impression'].values[0]
-                audio_path = iemocap_file.loc[(audio_feature['video_id'] == conv_id) & (audio_feature['text'] == target_sentence)]['path'].values[0]
+                iemocap_rows = filter_iemocap_rows_by_text(iemocap_file, conv_id, target_sentence)
+                audio_path = iemocap_rows['path'].values[0]
                 audio_directory = '../data/IEMOCAP_full_release'
                 audio_path_dict[f'{conv_id}_{conv_turn}'] = audio_directory + '/' + audio_path
                 if audio_description == 'True':
@@ -317,9 +436,15 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
 
 
     if dataset == 'iemocap':
-        train_ids, test_ids, valid_ids = data[3], data[4], data[5]
+        if prc_payload:
+            train_ids, test_ids, valid_ids = prc_splits['train'], prc_splits['test'], prc_splits['valid']
+        else:
+            train_ids, test_ids, valid_ids = data[3], data[4], data[5]
     elif dataset == 'meld':
-        train_ids, test_ids, valid_ids = data[4], data[5], data[6]
+        if prc_payload:
+            train_ids, test_ids, valid_ids = prc_splits['train'], prc_splits['test'], prc_splits['valid']
+        else:
+            train_ids, test_ids, valid_ids = data[4], data[5], data[6]
 
 
     new_train_id, new_test_id, new_valid_id = [], [], []
@@ -340,22 +465,23 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     # dataset_list = ['train', 'test', 'valid']
     persona_tag = '_persona' if include_persona == 'True' else ''
     prompt_tag = f'_{prompt_style}' if prompt_style else ''
-    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}{prompt_tag}'
+    format_tag = f'_{data_format}' if data_format else ''
+    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}{prompt_tag}{format_tag}'
     os.makedirs(data_path, exist_ok=True)
 
-    with open(f'{data_path}/train.json', 'w') as f_train:
+    with open(f'{data_path}/train.json', 'w', encoding='utf-8') as f_train:
         for train_id in new_train_id:
             if train_id.split('_')[0]=='125':
                 continue
             f_train.write(json.dumps({'path': audio_path_dict[train_id], \
             'input':content_task_dict[train_id],'target':f'{content_target_dict[train_id]}'}, ensure_ascii=False)+ '\n')
 
-    with open(f'{data_path}/test.json', 'w') as f_test:
+    with open(f'{data_path}/test.json', 'w', encoding='utf-8') as f_test:
         for test_id in new_test_id:
             f_test.write(json.dumps({'path': audio_path_dict[test_id],\
             'input':content_task_dict[test_id],'target':f'{content_target_dict[test_id]}'}, ensure_ascii=False)+ '\n')
 
-    with open(f'{data_path}/valid.json', 'w') as f_valid:
+    with open(f'{data_path}/valid.json', 'w', encoding='utf-8') as f_valid:
         for valid_id in new_valid_id:
             if valid_id.split('_')[0]=='1149':
                 continue
@@ -364,11 +490,12 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     
         
     # draw histogram of the length of the input text
-    plt.hist(length, bins=20)
-    plt.xlabel('Length of the input text')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of the length of the input text')
-    plt.savefig(f'{data_path}/histogram.png')
+    if plt is not None:
+        plt.hist(length, bins=20)
+        plt.xlabel('Length of the input text')
+        plt.ylabel('Frequency')
+        plt.title('Histogram of the length of the input text')
+        plt.savefig(f'{data_path}/histogram.png')
 
     return data_path
 
@@ -384,6 +511,8 @@ parser.add_argument('--experiments_setting', type=str, default='lora', help='Exp
 parser.add_argument('--include_persona', type=str, default='False', help='Whether to add offline speaker persona features to prompts')
 parser.add_argument('--persona_path', type=str, default=None, help='Path to offline speaker persona feature json')
 parser.add_argument('--prompt_style', type=str, default='qwen_chat', choices=['legacy', 'qwen_chat'], help='Prompt format style')
+parser.add_argument('--data_format', type=str, default='prc', choices=['speechcue', 'prc'], help='Data organization and label schema')
+parser.add_argument('--prc_data_dir', type=str, default=None, help='Optional path to PRC-Emo data json directory')
 args = parser.parse_args()
 
 
@@ -393,6 +522,7 @@ args = parser.parse_args()
 processed_data_path = process_dataset(dataset=args.dataset, window=args.historical_window
         , audio_description=args.audio_description, audio_impression=args.audio_impression, 
         audio_only=args.audio_only, audio_context=args.audio_context, experiments_setting=args.experiments_setting,
-        include_persona=args.include_persona, persona_path=args.persona_path, prompt_style=args.prompt_style)
+        include_persona=args.include_persona, persona_path=args.persona_path, prompt_style=args.prompt_style,
+        data_format=args.data_format, prc_data_dir=args.prc_data_dir)
 
 print(processed_data_path)

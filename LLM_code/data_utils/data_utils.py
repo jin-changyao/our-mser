@@ -243,10 +243,10 @@ class ModelArgs:
     eval_batch_size: int = 4
     gradient_accumulation_steps: int = 4
     lora: bool = True
-    lora_dim: int = 8
-    lora_alpha: int = 16
+    lora_dim: int = 32
+    lora_alpha: int = 128
     lora_dropout: float = 0.05
-    lora_module_name: str = 'q_proj,k_proj,v_proj,query_key_value'
+    lora_module_name: str = 'q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj'
     seed: int = 42
     offload_optimizer: bool = False
     deepspeed_config: str = None

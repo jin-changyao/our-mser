@@ -52,13 +52,13 @@ os.environ["HF_HUB_DOWNLOAD_TIMEOUT"] = "300"
 def get_labels_attr(dataset):
     label_list_set = {
         'iemocap':['happy', 'sad', 'neutral', 'angry', 'excited', 'frustrated'],
-        'meld':['neutral', 'surprise', 'fear', 'sad', 'joyful', 'disgust', 'angry'],
+        'meld':['neutral', 'surprise', 'fear', 'sadness', 'joy', 'disgust', 'anger'],
         'EmoryNLP': ['Joyful','Mad','Peaceful', 'Neutral','Sad','Powerful','Scared'],
         'dialydailog': ['happy', 'neutral', 'angry', 'sad', 'fear', 'surprise','disgust'],
     }
     label_str_set = {
         'iemocap':"'happy', 'sad', 'neutral', 'angry', 'excited', 'frustrated'",
-        'meld':"'neutral', 'surprise', 'fear', 'sad', 'joyful', 'disgust', 'angry'",
+        'meld':"'neutral', 'surprise', 'fear', 'sadness', 'joy', 'disgust', 'anger'",
         'EmoryNLP': "'Joyful','Mad','Peaceful', 'Neutral','Sad','Powerful','Scared'",
         'dialydailog': "'happy', 'neutral', 'angry', 'sad', 'fear', 'surprise','disgust'",
     }
@@ -73,7 +73,7 @@ def report_score(dataset, golds, preds, mode='test'):
         target_names = ['hap', 'sad', 'neu', 'ang', 'exc', 'fru']
         digits = 6
     elif dataset == 'meld':
-        target_names = ['neutral', 'surprise', 'fear', 'sad', 'joyful', 'disgust', 'angry']
+        target_names = ['neutral', 'surprise', 'fear', 'sadness', 'joy', 'disgust', 'anger']
         digits = 7
     elif dataset == 'EmoryNLP':
         target_names = ['Joyful','Mad','Peaceful', 'Neutral','Sad','Powerful','Scared']
@@ -274,16 +274,16 @@ parser.add_argument(
     # type=bool,
 )
 parser.add_argument(
-    "--lora_dim", type=int, default=16,
+    "--lora_dim", type=int, default=32,
 )
 parser.add_argument(
-    "--lora_alpha", type=int, default=16,
+    "--lora_alpha", type=int, default=128,
 )
 parser.add_argument(
     "--lora_dropout", type=float, default=0.05,
 )
 parser.add_argument(
-    "--lora_module_name", type=str, default='q_proj,k_proj,v_proj,query_key_value',
+    "--lora_module_name", type=str, default='q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj',
 )
 parser.add_argument(
     "--batch_size",

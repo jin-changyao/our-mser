@@ -19,11 +19,17 @@ audio_impression="${AUDIO_IMPRESSION:-False}"
 audio_context="${AUDIO_CONTEXT:-False}"
 audio_only="${AUDIO_ONLY:-False}"
 prompt_style="${PROMPT_STYLE:-qwen_chat}"
+data_format="${DATA_FORMAT:-prc}"
+PRC_DATA_DIR="${PRC_DATA_DIR:-}"
 
 SEED="${SEED:-1}"
 num_train_epochs="${NUM_TRAIN_EPOCHS:-15}"
 LORA_LR="${LORA_LR:-3e-4}"
 use_encoder="${USE_ENCODER:-False}"
+LORA_DIM="${LORA_DIM:-32}"
+LORA_ALPHA="${LORA_ALPHA:-128}"
+LORA_DROPOUT="${LORA_DROPOUT:-0.05}"
+LORA_MODULE_NAME="${LORA_MODULE_NAME:-q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj}"
 
 BS="${BATCH_SIZE:-8}"
 accumulations="${GRADIENT_ACCUMULATION_STEPS:-8}"
@@ -61,6 +67,14 @@ case "${Experiments_setting}" in
     zero_shot|few_shot|lora|all_parameters) ;;
     *)
         echo "Invalid EXPERIMENTS_SETTING: ${Experiments_setting}."
+        FLAG=0
+        ;;
+esac
+
+case "${data_format}" in
+    prc|speechcue) ;;
+    *)
+        echo "Invalid DATA_FORMAT: ${data_format}. Expected prc or speechcue."
         FLAG=0
         ;;
 esac
@@ -123,6 +137,9 @@ fi
 if [ "${prompt_style}" != "legacy" ]; then
     task="${task}_${prompt_style}"
 fi
+if [ -n "${data_format}" ]; then
+    task="${task}_${data_format}"
+fi
 
 echo "******************************************************************************************"
 echo "Our-MSER experiment"
@@ -141,8 +158,14 @@ echo "Audio description: ${audio_description}"
 echo "Audio impression: ${audio_impression}"
 echo "Audio context: ${audio_context}"
 echo "Prompt style: ${prompt_style}"
+echo "Data format: ${data_format}"
+echo "PRC data dir: ${PRC_DATA_DIR}"
 echo "Include persona: ${include_persona}"
 echo "Persona path: ${persona_path}"
+echo "LoRA dim: ${LORA_DIM}"
+echo "LoRA alpha: ${LORA_ALPHA}"
+echo "LoRA dropout: ${LORA_DROPOUT}"
+echo "LoRA modules: ${LORA_MODULE_NAME}"
 echo "Data percent: ${data_percent}"
 echo "Reprocess data: ${REPROCESS_DATA}"
 echo "Preprocess only: ${PREPROCESS_ONLY}"
@@ -156,7 +179,11 @@ prompt_tag=""
 if [ -n "${prompt_style}" ]; then
     prompt_tag="_${prompt_style}"
 fi
-DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}"
+format_tag=""
+if [ -n "${data_format}" ]; then
+    format_tag="_${data_format}"
+fi
+DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}${format_tag}"
 
 if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ ! -f "${DATA_PATH}/test.json" ] || [ ! -f "${DATA_PATH}/valid.json" ]; then
     DATA_PATH=$(python data_process.py \
@@ -169,7 +196,9 @@ if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ !
         --experiments_setting "${Experiments_setting}" \
         --include_persona "${include_persona}" \
         --persona_path "${persona_path}" \
-        --prompt_style "${prompt_style}")
+        --prompt_style "${prompt_style}" \
+        --data_format "${data_format}" \
+        --prc_data_dir "${PRC_DATA_DIR}")
     DATA_ACTION="generated"
 else
     DATA_ACTION="reused"
@@ -225,6 +254,10 @@ python main.py \
     --num_train_epochs "${num_train_epochs}" \
     --save_steps 100000 \
     --lora "${LORA}" \
+    --lora_dim "${LORA_DIM}" \
+    --lora_alpha "${LORA_ALPHA}" \
+    --lora_dropout "${LORA_DROPOUT}" \
+    --lora_module_name "${LORA_MODULE_NAME}" \
     --learning_rate "${LR}" \
     --do_eval "${DO_EVAL}" \
     --do_train "${DO_TRAIN}" \
