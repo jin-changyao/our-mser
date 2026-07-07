@@ -65,6 +65,53 @@ def load_prc_dialogs(dataset, prc_data_dir=None):
     return dialogs, split_ids, data_dir
 
 
+def read_jsonl(path):
+    rows = []
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+
+def load_feature_text_overrides(dataset, manifest_dir):
+    if not manifest_dir:
+        return {}
+    overrides = {}
+    for split in ['train', 'test', 'valid']:
+        path = os.path.join(manifest_dir, f'{dataset}_multimodal_{split}.jsonl')
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'Feature text manifest not found: {path}')
+        for row in read_jsonl(path):
+            text = row.get('text', '')
+            if not text:
+                continue
+            if dataset == 'meld':
+                dialog_id = row.get('old_dialog_id', row.get('dialog_id'))
+                turn_id = row.get('old_turn_id', row.get('turn_id'))
+                if dialog_id == '' or turn_id == '':
+                    continue
+                overrides[(int(dialog_id), int(turn_id))] = text
+    return overrides
+
+
+def apply_feature_text_overrides(sentence_dict, text_overrides):
+    if not text_overrides:
+        return sentence_dict, 0
+    updated = {}
+    replaced = 0
+    for conv_id, sentences in sentence_dict.items():
+        new_sentences = list(sentences)
+        for turn_id in range(len(new_sentences)):
+            key = (conv_id, turn_id)
+            if key in text_overrides:
+                new_sentences[turn_id] = text_overrides[key]
+                replaced += 1
+        updated[conv_id] = new_sentences
+    return updated, replaced
+
+
 def iemocap_speaker_name(conv_id, gender):
     if gender == "M":
         return "Male Speaker"
@@ -172,7 +219,7 @@ def build_qwen_chat_prompt(dataset, label_text, context_lines, target_utterance,
     ]
 
 
-def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None, prompt_style='qwen_chat', data_format='prc', prc_data_dir=None):
+def process_dataset(dataset, window=110, audio_description='True', audio_impression='False', audio_only='False', audio_context='False',experiments_setting='lora', include_persona='False', persona_path=None, prompt_style='qwen_chat', data_format='prc', prc_data_dir=None, use_feature_text='False', text_manifest_dir=None):
     '''
     dataset: parameter that define the evaluated dataset.
     window:       parameter that control the historical context window
@@ -259,6 +306,11 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             speaker_label_dict[conv_id] = temp_speaker_list
             speaker_name_dict[conv_id] = temp_speaker_names
             speaker_name_map_dict[conv_id] = {f'Speaker_{idx}': name for idx, name in zip(temp_speaker_list, temp_speaker_names)}
+
+    if use_feature_text == 'True':
+        text_overrides = load_feature_text_overrides(dataset, text_manifest_dir)
+        sentence_dict, replaced_texts = apply_feature_text_overrides(sentence_dict, text_overrides)
+        print(f'Feature text override enabled: replaced {replaced_texts} utterances from {text_manifest_dir}')
 
     # Process the utterances in the conversation, where 'index_w' is used to handle the starting index under the window size setting.
     
@@ -459,7 +511,8 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     persona_tag = '_persona' if include_persona == 'True' else ''
     prompt_tag = f'_{prompt_style}' if prompt_style else ''
     format_tag = f'_{data_format}' if data_format else ''
-    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}{prompt_tag}{format_tag}'
+    feature_text_tag = '_featuretext' if use_feature_text == 'True' else ''
+    data_path = f'../PROCESSED_DATASET/{dataset}/window/{audio_description}_{audio_impression}{persona_tag}{prompt_tag}{format_tag}{feature_text_tag}'
     os.makedirs(data_path, exist_ok=True)
 
     with open(f'{data_path}/train.json', 'w', encoding='utf-8') as f_train:
@@ -506,6 +559,8 @@ parser.add_argument('--persona_path', type=str, default=None, help='Path to offl
 parser.add_argument('--prompt_style', type=str, default='qwen_chat', choices=['legacy', 'qwen_chat'], help='Prompt format style')
 parser.add_argument('--data_format', type=str, default='prc', choices=['speechcue', 'prc'], help='Data organization and label schema')
 parser.add_argument('--prc_data_dir', type=str, default=None, help='Optional path to PRC-Emo data json directory')
+parser.add_argument('--use_feature_text', type=str, default='False', help='Use cleaned text from multimodal feature manifests')
+parser.add_argument('--text_manifest_dir', type=str, default=None, help='Directory containing *_multimodal_train/test/valid.jsonl files')
 args = parser.parse_args()
 
 
@@ -516,6 +571,7 @@ processed_data_path = process_dataset(dataset=args.dataset, window=args.historic
         , audio_description=args.audio_description, audio_impression=args.audio_impression, 
         audio_only=args.audio_only, audio_context=args.audio_context, experiments_setting=args.experiments_setting,
         include_persona=args.include_persona, persona_path=args.persona_path, prompt_style=args.prompt_style,
-        data_format=args.data_format, prc_data_dir=args.prc_data_dir)
+        data_format=args.data_format, prc_data_dir=args.prc_data_dir,
+        use_feature_text=args.use_feature_text, text_manifest_dir=args.text_manifest_dir)
 
 print(processed_data_path)

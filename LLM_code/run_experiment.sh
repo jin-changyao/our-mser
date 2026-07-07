@@ -37,6 +37,7 @@ historical_window="${HISTORICAL_WINDOW:-12}"
 data_percent="${DATA_PERCENT:-1.0}"
 REPROCESS_DATA="${REPROCESS_DATA:-False}"
 PREPROCESS_ONLY="${PREPROCESS_ONLY:-False}"
+USE_FEATURE_TEXT="${USE_FEATURE_TEXT:-True}"
 USE_MM_PREFIX="${USE_MM_PREFIX:-False}"
 MM_AUDIO_FEATURE_DIR="${MM_AUDIO_FEATURE_DIR:-chinese-hubert-large-UTT}"
 MM_VIDEO_FEATURE_DIR="${MM_VIDEO_FEATURE_DIR:-clip-vit-large-patch14-UTT}"
@@ -152,6 +153,9 @@ fi
 if [ "${USE_MM_PREFIX}" = "True" ]; then
     task="${task}_avprefix_a${MM_AUDIO_TOKENS}_v${MM_VIDEO_TOKENS}"
 fi
+if [ "${USE_FEATURE_TEXT}" = "True" ]; then
+    task="${task}_featuretext"
+fi
 
 echo "******************************************************************************************"
 echo "Our-MSER experiment"
@@ -181,6 +185,7 @@ echo "LoRA modules: ${LORA_MODULE_NAME}"
 echo "Data percent: ${data_percent}"
 echo "Reprocess data: ${REPROCESS_DATA}"
 echo "Preprocess only: ${PREPROCESS_ONLY}"
+echo "Use feature text: ${USE_FEATURE_TEXT}"
 echo "Use multimodal prefix: ${USE_MM_PREFIX}"
 echo "Multimodal manifest dir: ${MULTIMODAL_MANIFEST_DIR}"
 echo "MM audio feature dir: ${MM_AUDIO_FEATURE_DIR}"
@@ -201,7 +206,11 @@ format_tag=""
 if [ -n "${data_format}" ]; then
     format_tag="_${data_format}"
 fi
-DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}${format_tag}"
+feature_text_tag=""
+if [ "${USE_FEATURE_TEXT}" = "True" ]; then
+    feature_text_tag="_featuretext"
+fi
+DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}${format_tag}${feature_text_tag}"
 
 if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ ! -f "${DATA_PATH}/test.json" ] || [ ! -f "${DATA_PATH}/valid.json" ]; then
     DATA_PATH=$(python data_process.py \
@@ -216,7 +225,9 @@ if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ !
         --persona_path "${persona_path}" \
         --prompt_style "${prompt_style}" \
         --data_format "${data_format}" \
-        --prc_data_dir "${PRC_DATA_DIR}")
+        --prc_data_dir "${PRC_DATA_DIR}" \
+        --use_feature_text "${USE_FEATURE_TEXT}" \
+        --text_manifest_dir "${MULTIMODAL_MANIFEST_DIR}")
     DATA_ACTION="generated"
 else
     DATA_ACTION="reused"
