@@ -71,6 +71,23 @@ def load_multimodal_manifest(manifest_dir, dataset, split):
     return {row["utterance_id"]: row for row in rows}
 
 
+def infer_feature_root_from_manifest_dir(manifest_dir):
+    if not manifest_dir:
+        return None
+    path = Path(manifest_dir)
+    if path.name.startswith("splits_"):
+        return path.parent
+    return path
+
+
+def fallback_feature_path(manifest_dir, feature_dir, utterance_id):
+    feature_root = infer_feature_root_from_manifest_dir(manifest_dir)
+    if feature_root is None:
+        return ""
+    path = feature_root / feature_dir / f"{utterance_id}.npy"
+    return str(path) if path.is_file() else ""
+
+
 def read_data(file_name, percent, random_seed, args=None):
     f = open(file_name, 'r', encoding='utf-8').readlines()
     data = [json.loads(d) for d in f]
@@ -100,9 +117,20 @@ def read_data(file_name, percent, random_seed, args=None):
             utterance_id = manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
             manifest_row = manifest_by_id.get(utterance_id)
             if manifest_row is None:
-                missing_manifest.append(utterance_id)
-                audio_feature_paths.append("")
-                video_feature_paths.append("")
+                audio_path = fallback_feature_path(
+                    args.multimodal_manifest_dir,
+                    args.mm_audio_feature_dir,
+                    utterance_id,
+                )
+                video_path = fallback_feature_path(
+                    args.multimodal_manifest_dir,
+                    args.mm_video_feature_dir,
+                    utterance_id,
+                )
+                if not audio_path or not video_path:
+                    missing_manifest.append(utterance_id)
+                audio_feature_paths.append(audio_path)
+                video_feature_paths.append(video_path)
             else:
                 audio_feature_paths.append(manifest_row.get(f"feature_{args.mm_audio_feature_dir}", ""))
                 video_feature_paths.append(manifest_row.get(f"feature_{args.mm_video_feature_dir}", ""))
