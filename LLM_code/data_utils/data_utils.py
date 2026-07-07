@@ -15,6 +15,7 @@ from multiprocessing import Pool
 import multiprocessing
 import math
 from random import sample
+from pathlib import Path
 from transformers import (
     StoppingCriteria,
     StoppingCriteriaList,
@@ -28,20 +29,92 @@ from torch.nn.utils.rnn import pad_sequence
 logger = logging.getLogger(__name__)
 AUDIO_MAX_LEN = 16000*6
 
-def read_data(file_name, percent, random_seed):
+def read_jsonl(path):
+    rows = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+
+def infer_split_from_file_name(file_name):
+    stem = Path(file_name).stem.lower()
+    if "train" in stem:
+        return "train"
+    if "valid" in stem or "dev" in stem:
+        return "valid"
+    if "test" in stem:
+        return "test"
+    return ""
+
+
+def manifest_key_from_path(dataset, split, path):
+    stem = Path(str(path)).stem
+    if dataset == "iemocap":
+        return stem
+    if dataset == "meld":
+        split_prefix = {"train": "train", "valid": "val", "dev": "val", "test": "test"}.get(split, split)
+        return f"{split_prefix}_{stem}"
+    return stem
+
+
+def load_multimodal_manifest(manifest_dir, dataset, split):
+    if not manifest_dir:
+        return {}
+    split_name = "valid" if split == "dev" else split
+    manifest_path = Path(manifest_dir) / f"{dataset}_multimodal_{split_name}.jsonl"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"Multimodal manifest not found: {manifest_path}")
+    rows = read_jsonl(manifest_path)
+    return {row["utterance_id"]: row for row in rows}
+
+
+def read_data(file_name, percent, random_seed, args=None):
     f = open(file_name, 'r', encoding='utf-8').readlines()
     data = [json.loads(d) for d in f]
+    use_mm_prefix = bool(args is not None and getattr(args, "use_mm_prefix", False))
+    split = infer_split_from_file_name(file_name)
+    manifest_by_id = {}
+    if use_mm_prefix:
+        manifest_by_id = load_multimodal_manifest(
+            getattr(args, "multimodal_manifest_dir", ""),
+            getattr(args, "dataset", ""),
+            split,
+        )
 
     inputs = []
     targets = []
     paths = []
+    audio_feature_paths = []
+    video_feature_paths = []
+    missing_manifest = []
     for index, d in enumerate(data):
         if pd.isnull(d['target']) or pd.isna(d['target']):
             continue
         inputs.append(d['input'])
         targets.append(d['target'])
         paths.append(d['path'])
+        if use_mm_prefix:
+            utterance_id = manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
+            manifest_row = manifest_by_id.get(utterance_id)
+            if manifest_row is None:
+                missing_manifest.append(utterance_id)
+                audio_feature_paths.append("")
+                video_feature_paths.append("")
+            else:
+                audio_feature_paths.append(manifest_row.get(f"feature_{args.mm_audio_feature_dir}", ""))
+                video_feature_paths.append(manifest_row.get(f"feature_{args.mm_video_feature_dir}", ""))
+    if missing_manifest:
+        raise ValueError(
+            f"Missing {len(missing_manifest)} multimodal manifest rows for {file_name}. "
+            f"Examples: {missing_manifest[:10]}"
+        )
     dict_ = {'input': inputs, 'output': targets, 'path': paths}
+    if use_mm_prefix:
+        dict_["audio_feature_path"] = audio_feature_paths
+        dict_["video_feature_path"] = video_feature_paths
     df_data = pd.DataFrame(dict_)
     df_data.dropna(axis=0, how='any')
 
@@ -73,7 +146,16 @@ class Seq2SeqDataset(Dataset):
         inputs = list(data["input"])
         outputs = list(data['output'])
         paths = list(data['path'])
-        self.examples = [[i, o, p] for i, o, p in zip(inputs, outputs, paths)]       
+        self.use_mm_prefix = getattr(args, "use_mm_prefix", False)
+        if self.use_mm_prefix:
+            audio_feature_paths = list(data["audio_feature_path"])
+            video_feature_paths = list(data["video_feature_path"])
+            self.examples = [
+                [i, o, p, a, v]
+                for i, o, p, a, v in zip(inputs, outputs, paths, audio_feature_paths, video_feature_paths)
+            ]
+        else:
+            self.examples = [[i, o, p] for i, o, p in zip(inputs, outputs, paths)]       
 
     def __len__(self):
         return len(self.examples)
@@ -118,6 +200,9 @@ class Seq2SeqCollator(object):
             inputs = preprocess_data_batch(batch, self.tokenizer, self.args)
         
         if self.feature == 'text':
+            if getattr(self.args, "use_mm_prefix", False):
+                inputs["mm_audio_features"] = self.load_numpy_features([d[3] for d in batch])
+                inputs["mm_video_features"] = self.load_numpy_features([d[4] for d in batch])
             return inputs
         
         paths = [d[2] for d in batch]
@@ -147,6 +232,17 @@ class Seq2SeqCollator(object):
             inputs['audio_masks'] = inputs['audio_masks'].unsqueeze(0)
         
         return inputs
+
+    def load_numpy_features(self, paths):
+        features = []
+        for path in paths:
+            if not path:
+                raise FileNotFoundError("Empty multimodal feature path.")
+            array = np.load(path)
+            if array.ndim > 1:
+                array = array.mean(axis=0)
+            features.append(torch.tensor(array, dtype=torch.float32))
+        return torch.stack(features, dim=0)
 
 
 def preprocess_data_batch(data, tokenizer, args):
@@ -253,6 +349,16 @@ class ModelArgs:
     zero_shot: bool = False
     mode: str = "sft"
     gradient_checkpointing: bool = False
+    use_mm_prefix: bool = False
+    multimodal_manifest_dir: str = ""
+    mm_audio_feature_dir: str = "chinese-hubert-large-UTT"
+    mm_video_feature_dir: str = "clip-vit-large-patch14-UTT"
+    mm_audio_dim: int = 1024
+    mm_video_dim: int = 768
+    mm_audio_tokens: int = 4
+    mm_video_tokens: int = 4
+    mm_projector_dropout: float = 0.05
+    mm_hidden_size: int = 3584
 
     def save(self, output_dir):
         os.makedirs(output_dir, exist_ok=True)

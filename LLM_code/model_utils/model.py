@@ -9,6 +9,140 @@ def get_params(model):
     print(f"Total number of parameters: {total_params}")
     print(f"Trainable number of parameters: {trainable_params}")
 
+
+def get_lm_input_embeddings(model):
+    if hasattr(model, "get_input_embeddings"):
+        embeddings = model.get_input_embeddings()
+        if embeddings is not None:
+            return embeddings
+    if hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
+        return model.model.embed_tokens
+    if hasattr(model, "model") and hasattr(model.model, "model") and hasattr(model.model.model, "embed_tokens"):
+        return model.model.model.embed_tokens
+    if (
+        hasattr(model, "model")
+        and hasattr(model.model, "model")
+        and hasattr(model.model.model, "model")
+        and hasattr(model.model.model.model, "embed_tokens")
+    ):
+        return model.model.model.model.embed_tokens
+    raise AttributeError("Cannot find LLM input embedding layer.")
+
+
+class AVPrefixProjector(nn.Module):
+    def __init__(self, input_dim, hidden_size, num_tokens, dropout=0.05):
+        super().__init__()
+        self.num_tokens = num_tokens
+        self.hidden_size = hidden_size
+        self.net = nn.Sequential(
+            nn.LayerNorm(input_dim),
+            nn.Linear(input_dim, hidden_size),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, num_tokens * hidden_size),
+        )
+
+    def forward(self, features):
+        tokens = self.net(features)
+        return tokens.view(features.size(0), self.num_tokens, self.hidden_size)
+
+
+class AVPrefixLLM(nn.Module):
+    def __init__(
+        self,
+        llm: nn.Module,
+        config,
+    ):
+        super().__init__()
+        self.llm = llm
+        self.config = config
+        self.audio_projector = AVPrefixProjector(
+            config.mm_audio_dim,
+            config.mm_hidden_size,
+            config.mm_audio_tokens,
+            config.mm_projector_dropout,
+        )
+        self.video_projector = AVPrefixProjector(
+            config.mm_video_dim,
+            config.mm_hidden_size,
+            config.mm_video_tokens,
+            config.mm_projector_dropout,
+        )
+
+    def build_inputs_embeds(self, input_ids, attention_mask, mm_audio_features, mm_video_features, labels=None):
+        input_ids = input_ids.clone()
+        input_ids[input_ids == -1] = 0
+        embed_tokens = get_lm_input_embeddings(self.llm)
+        text_embeds = embed_tokens(input_ids)
+        dtype = text_embeds.dtype
+        audio_tokens = self.audio_projector(mm_audio_features.to(text_embeds.device).to(dtype))
+        video_tokens = self.video_projector(mm_video_features.to(text_embeds.device).to(dtype))
+        prefix_embeds = torch.cat([audio_tokens, video_tokens], dim=1)
+        inputs_embeds = torch.cat([prefix_embeds, text_embeds], dim=1)
+
+        prefix_mask = torch.ones(
+            input_ids.size(0),
+            prefix_embeds.size(1),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
+        )
+        attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
+
+        if labels is not None:
+            prefix_labels = torch.full(
+                (labels.size(0), prefix_embeds.size(1)),
+                -100,
+                dtype=labels.dtype,
+                device=labels.device,
+            )
+            labels = torch.cat([prefix_labels, labels], dim=1)
+        return inputs_embeds, attention_mask, labels
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask,
+        mm_audio_features,
+        mm_video_features,
+        labels=None,
+        **kwargs,
+    ):
+        inputs_embeds, attention_mask, labels = self.build_inputs_embeds(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            mm_audio_features=mm_audio_features,
+            mm_video_features=mm_video_features,
+            labels=labels,
+        )
+        return self.llm(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            labels=labels,
+            return_dict=True,
+        )
+
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids,
+        attention_mask,
+        mm_audio_features,
+        mm_video_features,
+        **kwargs,
+    ):
+        inputs_embeds, attention_mask, _ = self.build_inputs_embeds(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            mm_audio_features=mm_audio_features,
+            mm_video_features=mm_video_features,
+            labels=None,
+        )
+        return self.llm.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+
 class speechLLM(nn.Module):
     def __init__(
         self,

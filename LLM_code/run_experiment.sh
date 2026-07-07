@@ -37,8 +37,15 @@ historical_window="${HISTORICAL_WINDOW:-12}"
 data_percent="${DATA_PERCENT:-1.0}"
 REPROCESS_DATA="${REPROCESS_DATA:-False}"
 PREPROCESS_ONLY="${PREPROCESS_ONLY:-False}"
+USE_MM_PREFIX="${USE_MM_PREFIX:-False}"
+MM_AUDIO_FEATURE_DIR="${MM_AUDIO_FEATURE_DIR:-chinese-hubert-large-UTT}"
+MM_VIDEO_FEATURE_DIR="${MM_VIDEO_FEATURE_DIR:-clip-vit-large-patch14-UTT}"
+MM_AUDIO_TOKENS="${MM_AUDIO_TOKENS:-4}"
+MM_VIDEO_TOKENS="${MM_VIDEO_TOKENS:-4}"
+MM_PROJECTOR_DROPOUT="${MM_PROJECTOR_DROPOUT:-0.05}"
 
 MODELS_ROOT="${MODELS_ROOT:-/home/pc/jcy/models}"
+DATASETS_ROOT="${DATASETS_ROOT:-/home/pc/jcy/datasets}"
 
 case "${MODEL_NAME}" in
     llama2|LLaMA2|llama-2)
@@ -120,8 +127,10 @@ fi
 
 if [ "${DATASET}" = "iemocap" ]; then
     MAX_LENGTH="${MAX_LENGTH:-2600}"
+    MULTIMODAL_MANIFEST_DIR="${MULTIMODAL_MANIFEST_DIR:-${DATASETS_ROOT}/iemocap/features/splits_6way}"
 elif [ "${DATASET}" = "meld" ]; then
     MAX_LENGTH="${MAX_LENGTH:-1500}"
+    MULTIMODAL_MANIFEST_DIR="${MULTIMODAL_MANIFEST_DIR:-${DATASETS_ROOT}/meld/features/splits_7way}"
 fi
 
 task="text"
@@ -139,6 +148,9 @@ if [ "${prompt_style}" != "legacy" ]; then
 fi
 if [ -n "${data_format}" ]; then
     task="${task}_${data_format}"
+fi
+if [ "${USE_MM_PREFIX}" = "True" ]; then
+    task="${task}_avprefix_a${MM_AUDIO_TOKENS}_v${MM_VIDEO_TOKENS}"
 fi
 
 echo "******************************************************************************************"
@@ -169,6 +181,12 @@ echo "LoRA modules: ${LORA_MODULE_NAME}"
 echo "Data percent: ${data_percent}"
 echo "Reprocess data: ${REPROCESS_DATA}"
 echo "Preprocess only: ${PREPROCESS_ONLY}"
+echo "Use multimodal prefix: ${USE_MM_PREFIX}"
+echo "Multimodal manifest dir: ${MULTIMODAL_MANIFEST_DIR}"
+echo "MM audio feature dir: ${MM_AUDIO_FEATURE_DIR}"
+echo "MM video feature dir: ${MM_VIDEO_FEATURE_DIR}"
+echo "MM audio tokens: ${MM_AUDIO_TOKENS}"
+echo "MM video tokens: ${MM_VIDEO_TOKENS}"
 echo "******************************************************************************************"
 
 persona_tag=""
@@ -263,4 +281,11 @@ python main.py \
     --do_train "${DO_TRAIN}" \
     --statistic_mode True \
     --data_percent "${data_percent}" \
-    --seed "${SEED}"
+    --seed "${SEED}" \
+    --use_mm_prefix "${USE_MM_PREFIX}" \
+    --multimodal_manifest_dir "${MULTIMODAL_MANIFEST_DIR}" \
+    --mm_audio_feature_dir "${MM_AUDIO_FEATURE_DIR}" \
+    --mm_video_feature_dir "${MM_VIDEO_FEATURE_DIR}" \
+    --mm_audio_tokens "${MM_AUDIO_TOKENS}" \
+    --mm_video_tokens "${MM_VIDEO_TOKENS}" \
+    --mm_projector_dropout "${MM_PROJECTOR_DROPOUT}"

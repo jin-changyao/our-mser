@@ -28,6 +28,7 @@ import warnings
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 import numpy as np
 from data_utils.data_utils import *
+from model_utils.model import AVPrefixLLM
 from torch.optim import AdamW
 from torch.optim import AdamW, Adam
 from typing import List, Dict
@@ -381,6 +382,52 @@ parser.add_argument(
     "--feature",
     default='text'
 )
+parser.add_argument(
+    "--use_mm_prefix",
+    default='False',
+    help='Whether to inject audio/video features as learned prefix tokens.'
+)
+parser.add_argument(
+    "--multimodal_manifest_dir",
+    type=str,
+    default='',
+    help='Directory containing *_multimodal_train/test/valid.jsonl files.'
+)
+parser.add_argument(
+    "--mm_audio_feature_dir",
+    type=str,
+    default='chinese-hubert-large-UTT'
+)
+parser.add_argument(
+    "--mm_video_feature_dir",
+    type=str,
+    default='clip-vit-large-patch14-UTT'
+)
+parser.add_argument(
+    "--mm_audio_dim",
+    type=int,
+    default=1024
+)
+parser.add_argument(
+    "--mm_video_dim",
+    type=int,
+    default=768
+)
+parser.add_argument(
+    "--mm_audio_tokens",
+    type=int,
+    default=4
+)
+parser.add_argument(
+    "--mm_video_tokens",
+    type=int,
+    default=4
+)
+parser.add_argument(
+    "--mm_projector_dropout",
+    type=float,
+    default=0.05
+)
 
 args = parser.parse_args()
 do_sample = args.top_k is not None or args.top_p is not None or args.num_beams > 1 or args.temp is not None
@@ -414,6 +461,11 @@ if args.lora == 'True':
     args.lora = True
 else:
     args.lora = False
+
+if args.use_mm_prefix == 'True':
+    args.use_mm_prefix = True
+else:
+    args.use_mm_prefix = False
 
 # eval_result_path = args.eval_result_path if args.eval_result_path is not None else args.output_dir
 # os.makedirs(eval_result_path, exist_ok=True)
@@ -459,7 +511,16 @@ model_args = {
     "theta": args.theta,
     "gradient_checkpointing": args.gradient_checkpointing,
     "data_percent": args.data_percent,
-    "feature": args.feature
+    "feature": args.feature,
+    "use_mm_prefix": args.use_mm_prefix,
+    "multimodal_manifest_dir": args.multimodal_manifest_dir,
+    "mm_audio_feature_dir": args.mm_audio_feature_dir,
+    "mm_video_feature_dir": args.mm_video_feature_dir,
+    "mm_audio_dim": args.mm_audio_dim,
+    "mm_video_dim": args.mm_video_dim,
+    "mm_audio_tokens": args.mm_audio_tokens,
+    "mm_video_tokens": args.mm_video_tokens,
+    "mm_projector_dropout": args.mm_projector_dropout,
 }
 args = ModelArgs()
 # pdb.set_trace()
@@ -543,13 +604,16 @@ def _get_pred_input_dict(batch):
 def _get_input_dict(batch):
     input_ids, labels, attention_mask, type_token_ids = batch["input_ids"], \
         batch["labels"], batch["attention_mask"], batch["type_token_ids"]
-    
-    return {
+
+    input_dict = {
         "input_ids": input_ids.to(device),
         "labels": labels.to(device),
         "attention_mask": attention_mask.to(device)
-        
     }
+    if args.use_mm_prefix:
+        input_dict["mm_audio_features"] = batch["mm_audio_features"].to(device)
+        input_dict["mm_video_features"] = batch["mm_video_features"].to(device)
+    return input_dict
 
 ## prepare model
 if "chatglm" in args.model_name_or_path:
@@ -611,6 +675,16 @@ if args.checkpoint_dir is not None:
 
     model = load_state_dict_from_zero_checkpoint(model, args.checkpoint_dir)
 
+if args.use_mm_prefix:
+    args.mm_hidden_size = getattr(config, "hidden_size", getattr(config, "n_embd", args.mm_hidden_size))
+    model = AVPrefixLLM(model, args)
+    print(
+        "Multimodal prefix enabled: "
+        f"audio {args.mm_audio_feature_dir} -> {args.mm_audio_tokens} tokens, "
+        f"video {args.mm_video_feature_dir} -> {args.mm_video_tokens} tokens, "
+        f"hidden_size={args.mm_hidden_size}"
+    )
+
 
 num_parameters = get_parameter_number(model)
 with open(os.path.join(args.output_dir, "model_params.json"), 'w', encoding='utf-8') as f:
@@ -625,12 +699,12 @@ if not os.path.exists(dev_file):
 train_dataset, dev_dataset = None, None
 train_collator, dev_collator = None, None
 if args.do_train:
-    df_train = read_data(train_file, percent=args.data_percent, random_seed=args.seed)
+    df_train = read_data(train_file, percent=args.data_percent, random_seed=args.seed, args=args)
     train_dataset = Seq2SeqDataset(args, df_train, mode='train')
     train_collator = Seq2SeqCollator(args, tokenizer, mode="train")
 if args.do_eval:
     dev_datasets = []
-    df_dev = read_data(dev_file, percent=args.data_percent, random_seed=args.seed)
+    df_dev = read_data(dev_file, percent=args.data_percent, random_seed=args.seed, args=args)
     dev_dataset = Seq2SeqDataset(args, df_dev, mode='dev')
     dev_collator = Seq2SeqCollator(args, tokenizer, mode="dev")
 
@@ -791,7 +865,9 @@ if __name__ == "__main__":
             all_answers = []
             for index, o in enumerate(outs):
                 this_input = eval_inputs_iter[index]
-                if args.model_type == "decoder":
+                if args.use_mm_prefix:
+                    answer = o
+                elif args.model_type == "decoder":
                     prompt_length = all_prompt_lengths[index] if index < len(all_prompt_lengths) else args.max_seq_length
                     output_ids = all_outputs[index][prompt_length: ]
                     answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -914,7 +990,9 @@ if __name__ == "__main__":
         all_answers = []
         for index, o in enumerate(outs):
             this_input = eval_inputs_iter[index]
-            if args.model_type == "decoder":
+            if args.use_mm_prefix:
+                answer = o
+            elif args.model_type == "decoder":
                 prompt_length = all_prompt_lengths[index] if index < len(all_prompt_lengths) else args.max_seq_length
                 output_ids = all_outputs[index][prompt_length: ]
                 answer = tokenizer.decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
