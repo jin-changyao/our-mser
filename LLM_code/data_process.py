@@ -2,6 +2,7 @@ import argparse
 import pickle
 import json
 import os 
+import sys
 import pandas as pd
 try:
     import matplotlib.pyplot as plt
@@ -310,7 +311,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     if use_feature_text == 'True':
         text_overrides = load_feature_text_overrides(dataset, text_manifest_dir)
         sentence_dict, replaced_texts = apply_feature_text_overrides(sentence_dict, text_overrides)
-        print(f'Feature text override enabled: replaced {replaced_texts} utterances from {text_manifest_dir}')
+        print(f'Feature text override enabled: replaced {replaced_texts} utterances from {text_manifest_dir}', file=sys.stderr)
 
     # Process the utterances in the conversation, where 'index_w' is used to handle the starting index under the window size setting.
     
