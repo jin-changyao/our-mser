@@ -273,7 +273,7 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
 
     parser = argparse.ArgumentParser(description="Build a MELD feature manifest from label/transcription/features.")
-    parser.add_argument("--feature_root", default=r"D:\datasets\meld\feature\features")
+    parser.add_argument("--feature_root", default=r"D:\datasets\meld\features")
     parser.add_argument("--label_file", default="label.npz")
     parser.add_argument("--transcription_file", default="transcription-engchi-polish.csv")
     parser.add_argument("--old_meld_pkl", default="../original_data/meld/meld.pkl")
