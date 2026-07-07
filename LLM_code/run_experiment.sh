@@ -14,7 +14,8 @@ MODEL_NAME="${MODEL_NAME:-qwen2.5}"
 DATASET="${DATASET:-iemocap}"
 Experiments_setting="${EXPERIMENTS_SETTING:-lora}"
 
-audio_description="${AUDIO_DESCRIPTION:-True}"
+DATA_SOURCE="${DATA_SOURCE:-manifest}"
+audio_description="${AUDIO_DESCRIPTION:-False}"
 audio_impression="${AUDIO_IMPRESSION:-False}"
 audio_context="${AUDIO_CONTEXT:-False}"
 audio_only="${AUDIO_ONLY:-False}"
@@ -38,7 +39,7 @@ data_percent="${DATA_PERCENT:-1.0}"
 REPROCESS_DATA="${REPROCESS_DATA:-False}"
 PREPROCESS_ONLY="${PREPROCESS_ONLY:-False}"
 USE_FEATURE_TEXT="${USE_FEATURE_TEXT:-True}"
-USE_MM_PREFIX="${USE_MM_PREFIX:-False}"
+USE_MM_PREFIX="${USE_MM_PREFIX:-True}"
 MM_AUDIO_FEATURE_DIR="${MM_AUDIO_FEATURE_DIR:-chinese-hubert-large-UTT}"
 MM_VIDEO_FEATURE_DIR="${MM_VIDEO_FEATURE_DIR:-clip-vit-large-patch14-UTT}"
 MM_AUDIO_TOKENS="${MM_AUDIO_TOKENS:-4}"
@@ -87,12 +88,22 @@ case "${data_format}" in
         ;;
 esac
 
+case "${DATA_SOURCE}" in
+    manifest|legacy) ;;
+    *)
+        echo "Invalid DATA_SOURCE: ${DATA_SOURCE}. Expected manifest or legacy."
+        FLAG=0
+        ;;
+esac
+
 if [ "${FLAG}" = 0 ]; then
     exit 1
 fi
 
 if [ -z "${USE_PERSONA+x}" ]; then
-    if [ "${DATASET}" = "iemocap" ]; then
+    if [ "${DATA_SOURCE}" = "manifest" ]; then
+        include_persona="False"
+    elif [ "${DATASET}" = "iemocap" ]; then
         include_persona="True"
     else
         include_persona="False"
@@ -147,13 +158,15 @@ fi
 if [ "${prompt_style}" != "legacy" ]; then
     task="${task}_${prompt_style}"
 fi
-if [ -n "${data_format}" ]; then
+if [ "${DATA_SOURCE}" = "manifest" ]; then
+    task="${task}_manifest"
+elif [ -n "${data_format}" ]; then
     task="${task}_${data_format}"
 fi
 if [ "${USE_MM_PREFIX}" = "True" ]; then
     task="${task}_avprefix_a${MM_AUDIO_TOKENS}_v${MM_VIDEO_TOKENS}"
 fi
-if [ "${USE_FEATURE_TEXT}" = "True" ]; then
+if [ "${DATA_SOURCE}" != "manifest" ] && [ "${USE_FEATURE_TEXT}" = "True" ]; then
     task="${task}_featuretext"
 fi
 
@@ -173,6 +186,7 @@ echo "Max context length: ${MAX_LENGTH}"
 echo "Audio description: ${audio_description}"
 echo "Audio impression: ${audio_impression}"
 echo "Audio context: ${audio_context}"
+echo "Data source: ${DATA_SOURCE}"
 echo "Prompt style: ${prompt_style}"
 echo "Data format: ${data_format}"
 echo "PRC data dir: ${PRC_DATA_DIR}"
@@ -210,24 +224,37 @@ feature_text_tag=""
 if [ "${USE_FEATURE_TEXT}" = "True" ]; then
     feature_text_tag="_featuretext"
 fi
-DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}${format_tag}${feature_text_tag}"
+if [ "${DATA_SOURCE}" = "manifest" ]; then
+    DATA_PATH="../PROCESSED_DATASET/${DATASET}/manifest/window_${historical_window}_${prompt_style}"
+else
+    DATA_PATH="../PROCESSED_DATASET/${DATASET}/window/${audio_description}_${audio_impression}${persona_tag}${prompt_tag}${format_tag}${feature_text_tag}"
+fi
 
 if [ "${REPROCESS_DATA}" = "True" ] || [ ! -f "${DATA_PATH}/train.json" ] || [ ! -f "${DATA_PATH}/test.json" ] || [ ! -f "${DATA_PATH}/valid.json" ]; then
-    DATA_PATH=$(python data_process.py \
-        --dataset "${DATASET}" \
-        --historical_window "${historical_window}" \
-        --audio_description "${audio_description}" \
-        --audio_impression "${audio_impression}" \
-        --audio_only "${audio_only}" \
-        --audio_context "${audio_context}" \
-        --experiments_setting "${Experiments_setting}" \
-        --include_persona "${include_persona}" \
-        --persona_path "${persona_path}" \
-        --prompt_style "${prompt_style}" \
-        --data_format "${data_format}" \
-        --prc_data_dir "${PRC_DATA_DIR}" \
-        --use_feature_text "${USE_FEATURE_TEXT}" \
-        --text_manifest_dir "${MULTIMODAL_MANIFEST_DIR}")
+    if [ "${DATA_SOURCE}" = "manifest" ]; then
+        DATA_PATH=$(python data_process_manifest.py \
+            --dataset "${DATASET}" \
+            --manifest_dir "${MULTIMODAL_MANIFEST_DIR}" \
+            --historical_window "${historical_window}" \
+            --prompt_style "${prompt_style}" \
+            --output_dir "${DATA_PATH}")
+    else
+        DATA_PATH=$(python data_process.py \
+            --dataset "${DATASET}" \
+            --historical_window "${historical_window}" \
+            --audio_description "${audio_description}" \
+            --audio_impression "${audio_impression}" \
+            --audio_only "${audio_only}" \
+            --audio_context "${audio_context}" \
+            --experiments_setting "${Experiments_setting}" \
+            --include_persona "${include_persona}" \
+            --persona_path "${persona_path}" \
+            --prompt_style "${prompt_style}" \
+            --data_format "${data_format}" \
+            --prc_data_dir "${PRC_DATA_DIR}" \
+            --use_feature_text "${USE_FEATURE_TEXT}" \
+            --text_manifest_dir "${MULTIMODAL_MANIFEST_DIR}")
+    fi
     DATA_ACTION="generated"
 else
     DATA_ACTION="reused"

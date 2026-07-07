@@ -52,6 +52,8 @@ def infer_split_from_file_name(file_name):
 
 def manifest_key_from_path(dataset, split, path):
     stem = Path(str(path)).stem
+    if stem.startswith(("train_", "val_", "test_", "Ses")):
+        return stem
     if dataset == "iemocap":
         return stem
     if dataset == "meld":
