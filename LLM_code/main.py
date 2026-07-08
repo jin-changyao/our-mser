@@ -84,7 +84,14 @@ def report_score(dataset, golds, preds, mode='test'):
         if isinstance(v, float):
             res[k] = round(v * 100, 3)
 
-    res_matrix = metrics.classification_report(golds, preds, target_names=target_names, digits=digits)
+    res_matrix = metrics.classification_report(
+        golds,
+        preds,
+        labels=list(range(len(target_names))),
+        target_names=target_names,
+        digits=digits,
+        zero_division=0,
+    )
     # res['matrix'].append(["ACC"])
     # for i in range(len(target_names)):
     #     res['matrix'][-1].append("{}: {:.4f}".format(target_names[i], accuracy_score(golds[golds == i], preds[golds == i])))
