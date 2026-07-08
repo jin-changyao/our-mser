@@ -133,10 +133,40 @@ def build_old_sequences(old_data):
     return sequences
 
 
-def build_manifest(feature_root, label_path, transcription_path, feature_dirs, old_meld_pkl=None):
+def load_prc_sequences(prc_data_dir):
+    if prc_data_dir is None or not prc_data_dir.is_dir():
+        return {}
+    sequences = {}
+    for split in ["train", "valid", "test"]:
+        path = prc_data_dir / f"meld.{split}.json"
+        if not path.is_file():
+            return {}
+        with path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+        rows = []
+        for dialog_id in sorted(payload.keys(), key=lambda item: int(item)):
+            conv = payload[dialog_id]
+            speakers = conv.get("speakers", [])
+            sentences = conv.get("sentences", [])
+            for turn_id, text in enumerate(sentences):
+                speaker = speakers[turn_id] if turn_id < len(speakers) else ""
+                rows.append(
+                    {
+                        "dialog_id": int(dialog_id),
+                        "turn_id": turn_id,
+                        "speaker": speaker,
+                        "text": text,
+                    }
+                )
+        sequences[split] = rows
+    return sequences
+
+
+def build_manifest(feature_root, label_path, transcription_path, feature_dirs, old_meld_pkl=None, prc_data_dir=None):
     payload = np.load(label_path, allow_pickle=True)
     transcriptions = read_transcriptions(transcription_path)
     old_sequences = build_old_sequences(load_old_meld_pickle(old_meld_pkl))
+    prc_sequences = load_prc_sequences(prc_data_dir)
 
     rows = []
     missing_transcription = []
@@ -169,6 +199,9 @@ def build_manifest(feature_root, label_path, transcription_path, feature_dirs, o
             old_label = old_row["label"] if old_row else None
             old_text_match = old_text is not None and clean_text(old_text) == clean_text(text)
             old_label_match = old_label is not None and old_label == label
+            prc_row = None
+            if split in prc_sequences and sequence_index < len(prc_sequences[split]):
+                prc_row = prc_sequences[split][sequence_index]
 
             if old_text is not None and not old_text_match:
                 old_text_mismatches.append(
@@ -212,6 +245,10 @@ def build_manifest(feature_root, label_path, transcription_path, feature_dirs, o
                 "old_speechcue_label": old_label if old_label is not None else "",
                 "old_text_match": old_text_match if old_text is not None else "",
                 "old_label_match": old_label_match if old_label is not None else "",
+                "speaker": prc_row["speaker"] if prc_row else "",
+                "prc_dialog_id": prc_row["dialog_id"] if prc_row else "",
+                "prc_turn_id": prc_row["turn_id"] if prc_row else "",
+                "prc_text_match": clean_text(prc_row["text"]) == clean_text(text) if prc_row else "",
             }
             for name in feature_dirs:
                 path = feature_path(feature_root, name, utterance_id)
@@ -236,6 +273,8 @@ def build_manifest(feature_root, label_path, transcription_path, feature_dirs, o
         "old_speechcue_text_mismatch_examples": old_text_mismatches[:5],
         "old_speechcue_label_mismatches": len(old_label_mismatches),
         "old_speechcue_label_mismatch_examples": old_label_mismatches[:10],
+        "speaker_rows": sum(1 for row in rows if row.get("speaker")),
+        "prc_text_mismatches": sum(1 for row in rows if row.get("prc_text_match") is False),
     }
     return rows, report
 
@@ -277,6 +316,7 @@ def main():
     parser.add_argument("--label_file", default="label.npz")
     parser.add_argument("--transcription_file", default="transcription-engchi-polish.csv")
     parser.add_argument("--old_meld_pkl", default="../original_data/meld/meld.pkl")
+    parser.add_argument("--prc_data_dir", default="../../PRC-Emo-code/data")
     parser.add_argument("--out_jsonl", default="meld_feature_manifest_7way.jsonl")
     parser.add_argument("--out_csv", default="meld_feature_manifest_7way.csv")
     parser.add_argument("--out_split_dir", default="splits_7way")
@@ -294,8 +334,11 @@ def main():
     old_meld_pkl = Path(args.old_meld_pkl)
     if not old_meld_pkl.is_file():
         old_meld_pkl = None
+    prc_data_dir = Path(args.prc_data_dir)
+    if not prc_data_dir.is_dir():
+        prc_data_dir = None
 
-    rows, report = build_manifest(feature_root, label_path, transcription_path, feature_dirs, old_meld_pkl)
+    rows, report = build_manifest(feature_root, label_path, transcription_path, feature_dirs, old_meld_pkl, prc_data_dir)
 
     out_jsonl = feature_root / args.out_jsonl
     out_csv = feature_root / args.out_csv

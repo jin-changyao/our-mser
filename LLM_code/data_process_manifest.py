@@ -47,6 +47,8 @@ def read_jsonl(path):
 
 
 def speaker_name(dataset, row):
+    if row.get("speaker"):
+        return row["speaker"]
     if dataset == "iemocap":
         speaker = row.get("speaker", "")
         if speaker == "M":
