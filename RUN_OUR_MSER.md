@@ -6,7 +6,7 @@ Use only this project for formal experiments:
 /home/pc/jcy/Our-MSER
 ```
 
-The runner keeps the original server baseline protocol:
+The runner keeps the original server baseline training protocol:
 
 ```text
 python main.py
@@ -15,6 +15,9 @@ gradient accumulation=8
 epochs=15
 learning rate=3e-4
 historical window=12
+LoRA dim=16
+LoRA alpha=16
+LoRA modules=q_proj,k_proj,v_proj,query_key_value
 ```
 
 ## Model Paths
@@ -61,11 +64,26 @@ GPU 0 uses `MASTER_PORT=29500`; GPU 2 uses `MASTER_PORT=29502`.
 
 ## Common Runs
 
-Default model is Qwen2.5. IEMOCAP + Qwen2.5 + speech description + persona:
+Default model is Qwen2.5. The default method is C-manifest + Qwen2.5 + audio/video feature prefix, without speech-description text and without persona:
 
 ```bash
 bash run_gpu0.sh
 ```
+
+Default method flags:
+
+```text
+DATA_SOURCE=manifest
+AUDIO_DESCRIPTION=False
+USE_PERSONA=False
+USE_MM_PREFIX=True
+PROMPT_STYLE=qwen_chat
+```
+
+Each run writes to a timestamped output directory ending in `run_YYYYmmdd_HHMMSS`.
+The directory contains `run_config.json` from the shell runner, `model_args.json`
+from `main.py`, `model_params.json`, `eval_results_*.txt`, and
+`preds_for_eval_*.text`.
 
 The default prompt style is `qwen_chat`, which renders each sample with the
 model tokenizer's chat template. To run the old prompt format for comparison:
@@ -89,19 +107,19 @@ After that, normal runs reuse the processed files. To force regeneration:
 REPROCESS_DATA=True bash run_gpu0.sh
 ```
 
-IEMOCAP + LLaMA2 + speech description + persona:
+IEMOCAP + LLaMA2 with the same C-manifest + AV-prefix route:
 
 ```bash
 MODEL_NAME=llama2 bash run_gpu0.sh
 ```
 
-MELD + Qwen2.5 + speech description, no persona:
+MELD + Qwen2.5 + C-manifest + AV-prefix:
 
 ```bash
 DATASET=meld bash run_gpu0.sh
 ```
 
-MELD + LLaMA2 + speech description, no persona:
+MELD + LLaMA2 + C-manifest + AV-prefix:
 
 ```bash
 DATASET=meld MODEL_NAME=llama2 bash run_gpu0.sh

@@ -282,16 +282,16 @@ parser.add_argument(
     # type=bool,
 )
 parser.add_argument(
-    "--lora_dim", type=int, default=32,
+    "--lora_dim", type=int, default=16,
 )
 parser.add_argument(
-    "--lora_alpha", type=int, default=128,
+    "--lora_alpha", type=int, default=16,
 )
 parser.add_argument(
     "--lora_dropout", type=float, default=0.05,
 )
 parser.add_argument(
-    "--lora_module_name", type=str, default='q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj',
+    "--lora_module_name", type=str, default='q_proj,k_proj,v_proj,query_key_value',
 )
 parser.add_argument(
     "--batch_size",
@@ -539,6 +539,7 @@ print(args)
 
 if not os.path.exists(args.output_dir):
     os.makedirs(args.output_dir, exist_ok=True)
+args.save(args.output_dir)
 
 random.seed(args.seed)
 np.random.seed(args.seed)

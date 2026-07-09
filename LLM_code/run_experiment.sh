@@ -27,15 +27,16 @@ SEED="${SEED:-1}"
 num_train_epochs="${NUM_TRAIN_EPOCHS:-15}"
 LORA_LR="${LORA_LR:-3e-4}"
 use_encoder="${USE_ENCODER:-False}"
-LORA_DIM="${LORA_DIM:-32}"
-LORA_ALPHA="${LORA_ALPHA:-128}"
+LORA_DIM="${LORA_DIM:-16}"
+LORA_ALPHA="${LORA_ALPHA:-16}"
 LORA_DROPOUT="${LORA_DROPOUT:-0.05}"
-LORA_MODULE_NAME="${LORA_MODULE_NAME:-q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj}"
+LORA_MODULE_NAME="${LORA_MODULE_NAME:-q_proj,k_proj,v_proj,query_key_value}"
 
 BS="${BATCH_SIZE:-8}"
 accumulations="${GRADIENT_ACCUMULATION_STEPS:-8}"
 historical_window="${HISTORICAL_WINDOW:-12}"
 data_percent="${DATA_PERCENT:-1.0}"
+RUN_ID="${RUN_ID:-$(date +%Y%m%d_%H%M%S)}"
 REPROCESS_DATA="${REPROCESS_DATA:-False}"
 PREPROCESS_ONLY="${PREPROCESS_ONLY:-False}"
 USE_FEATURE_TEXT="${USE_FEATURE_TEXT:-True}"
@@ -197,6 +198,7 @@ echo "LoRA alpha: ${LORA_ALPHA}"
 echo "LoRA dropout: ${LORA_DROPOUT}"
 echo "LoRA modules: ${LORA_MODULE_NAME}"
 echo "Data percent: ${data_percent}"
+echo "Run id: ${RUN_ID}"
 echo "Reprocess data: ${REPROCESS_DATA}"
 echo "Preprocess only: ${PREPROCESS_ONLY}"
 echo "Use feature text: ${USE_FEATURE_TEXT}"
@@ -291,12 +293,62 @@ elif [ "${Experiments_setting}" = "all_parameters" ]; then
     LR=2e-5
 fi
 
-OUTPUT_DIR="../experiments/${MODEL_LABEL}/${Experiments_setting}/${DATASET}/window_${historical_window}/LR_${LR}_BS_${BS}_per_${data_percent}_${task}_class5_${SEED}_single_gpu_e15"
+OUTPUT_DIR="../experiments/${MODEL_LABEL}/${Experiments_setting}/${DATASET}/window_${historical_window}/LR_${LR}_BS_${BS}_per_${data_percent}_${task}_class5_${SEED}_single_gpu_e15_run_${RUN_ID}"
 
 echo "******************************************************************************************"
 echo "Start running main.py without DeepSpeed launcher"
 echo "Output dir: ${OUTPUT_DIR}"
 echo "******************************************************************************************"
+
+mkdir -p "${OUTPUT_DIR}"
+cat > "${OUTPUT_DIR}/run_config.json" <<EOF
+{
+  "run_id": "${RUN_ID}",
+  "dataset": "${DATASET}",
+  "model_name": "${MODEL_NAME}",
+  "model_label": "${MODEL_LABEL}",
+  "model_path": "${MODEL_PATH}",
+  "experiments_setting": "${Experiments_setting}",
+  "data_source": "${DATA_SOURCE}",
+  "audio_description": "${audio_description}",
+  "audio_impression": "${audio_impression}",
+  "audio_context": "${audio_context}",
+  "audio_only": "${audio_only}",
+  "prompt_style": "${prompt_style}",
+  "data_format": "${data_format}",
+  "include_persona": "${include_persona}",
+  "persona_path": "${persona_path}",
+  "batch_size": "${BS}",
+  "gradient_accumulation_steps": "${accumulations}",
+  "num_train_epochs": "${num_train_epochs}",
+  "learning_rate": "${LR}",
+  "lora": "${LORA}",
+  "lora_dim": "${LORA_DIM}",
+  "lora_alpha": "${LORA_ALPHA}",
+  "lora_dropout": "${LORA_DROPOUT}",
+  "lora_module_name": "${LORA_MODULE_NAME}",
+  "historical_window": "${historical_window}",
+  "max_length": "${MAX_LENGTH}",
+  "seed": "${SEED}",
+  "data_percent": "${data_percent}",
+  "use_feature_text": "${USE_FEATURE_TEXT}",
+  "use_mm_prefix": "${USE_MM_PREFIX}",
+  "multimodal_manifest_dir": "${MULTIMODAL_MANIFEST_DIR}",
+  "mm_audio_feature_dir": "${MM_AUDIO_FEATURE_DIR}",
+  "mm_video_feature_dir": "${MM_VIDEO_FEATURE_DIR}",
+  "mm_audio_tokens": "${MM_AUDIO_TOKENS}",
+  "mm_video_tokens": "${MM_VIDEO_TOKENS}",
+  "mm_projector_dropout": "${MM_PROJECTOR_DROPOUT}",
+  "cuda_visible_devices": "${CUDA_VISIBLE_DEVICES}",
+  "master_addr": "${MASTER_ADDR}",
+  "master_port": "${MASTER_PORT}",
+  "rank": "${RANK}",
+  "local_rank": "${LOCAL_RANK}",
+  "world_size": "${WORLD_SIZE}",
+  "data_path": "${DATA_PATH}",
+  "output_dir": "${OUTPUT_DIR}"
+}
+EOF
 
 python main.py \
     --dataset "${DATASET}" \
