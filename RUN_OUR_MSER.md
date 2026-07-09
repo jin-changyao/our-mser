@@ -62,6 +62,33 @@ WORLD_SIZE=1
 
 GPU 0 uses `MASTER_PORT=29500`; GPU 2 uses `MASTER_PORT=29502`.
 
+## Diagnose Prompt Truncation
+
+This does not train the model. It loads the processed JSON files and the
+tokenizer, then compares right truncation and left truncation.
+
+IEMOCAP:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+python diagnose_truncation.py \
+  --data_dir ../PROCESSED_DATASET/iemocap/manifest/window_12_qwen_chat \
+  --model_path /home/pc/jcy/models/Qwen2.5-7B-Instruct \
+  --max_length 2600 \
+  --out ../experiments/diagnosis_truncation_iemocap_2600.json
+```
+
+MELD:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+python diagnose_truncation.py \
+  --data_dir ../PROCESSED_DATASET/meld/manifest/window_12_qwen_chat \
+  --model_path /home/pc/jcy/models/Qwen2.5-7B-Instruct \
+  --max_length 1500 \
+  --out ../experiments/diagnosis_truncation_meld_1500.json
+```
+
 ## Common Runs
 
 Default model is Qwen2.5. The default method is C-manifest + Qwen2.5 + audio/video feature prefix, without speech-description text and without persona:
