@@ -89,6 +89,29 @@ python diagnose_truncation.py \
   --out ../experiments/diagnosis_truncation_meld_1500.json
 ```
 
+## Summarize Experiment Results
+
+Run this after experiments finish. It scans all `preds_for_eval*.text` files
+under `../experiments`, reads `run_config.json` and `model_args.json` when
+available, and writes reusable summary files.
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+python summarize_experiments.py --print_best
+```
+
+Default outputs:
+
+```text
+/home/pc/jcy/Our-MSER/experiments/summary/all_results.csv
+/home/pc/jcy/Our-MSER/experiments/summary/best_results.csv
+/home/pc/jcy/Our-MSER/experiments/summary/experiment_summary.md
+```
+
+Use `best_results.csv` or `experiment_summary.md` to quickly check which
+configuration is best for each dataset. Use `all_results.csv` when you want to
+compare every epoch of every run.
+
 ## Common Runs
 
 Default model is Qwen2.5. The default method is C-manifest + Qwen2.5 + audio/video feature prefix, without speech-description text and without persona:
