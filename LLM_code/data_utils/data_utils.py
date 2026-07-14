@@ -116,7 +116,7 @@ def read_data(file_name, percent, random_seed, args=None):
         targets.append(d['target'])
         paths.append(d['path'])
         if use_mm_prefix:
-            utterance_id = manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
+            utterance_id = d.get("utterance_id") or manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
             manifest_row = manifest_by_id.get(utterance_id)
             if manifest_row is None:
                 audio_path = fallback_feature_path(

@@ -109,6 +109,21 @@ python diagnose_legacy_manifest_alignment.py \
   --out ../experiments/diagnosis_align_iemocap_legacy_speech_manifest.json
 ```
 
+After pulling code that adds `utterance_id` to legacy processed JSON, regenerate
+the processed data before training mixed legacy + C-prefix runs:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+REPROCESS_DATA=True \
+DATASET=iemocap \
+DATA_SOURCE=legacy \
+AUDIO_DESCRIPTION=True \
+USE_PERSONA=False \
+USE_MM_PREFIX=True \
+PROMPT_STYLE=qwen_chat \
+bash run_gpu0.sh
+```
+
 MELD legacy speech-text + C features:
 
 ```bash
@@ -208,6 +223,28 @@ DATASET=meld MODEL_NAME=llama2 bash run_gpu0.sh
 ```
 
 Run on GPU 2 by replacing `run_gpu0.sh` with `run_gpu2.sh`.
+
+For memory-constrained mixed runs, keep the same task but enable gradient
+checkpointing and use small AV-prefix/LoRA settings:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+GRADIENT_CHECKPOINTING=True \
+DATASET=iemocap \
+MODEL_NAME=qwen2.5 \
+DATA_SOURCE=legacy \
+AUDIO_DESCRIPTION=True \
+USE_PERSONA=False \
+USE_MM_PREFIX=True \
+MM_AUDIO_TOKENS=1 \
+MM_VIDEO_TOKENS=1 \
+LORA_DIM=8 \
+LORA_ALPHA=32 \
+LORA_MODULE_NAME=q_proj,v_proj \
+REPROCESS_DATA=True \
+bash run_gpu0.sh
+```
 
 ## Generate MELD Persona
 

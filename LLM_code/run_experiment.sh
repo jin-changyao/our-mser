@@ -27,6 +27,7 @@ SEED="${SEED:-1}"
 num_train_epochs="${NUM_TRAIN_EPOCHS:-15}"
 LORA_LR="${LORA_LR:-3e-4}"
 use_encoder="${USE_ENCODER:-False}"
+GRADIENT_CHECKPOINTING="${GRADIENT_CHECKPOINTING:-False}"
 LORA_DIM="${LORA_DIM:-16}"
 LORA_ALPHA="${LORA_ALPHA:-16}"
 LORA_DROPOUT="${LORA_DROPOUT:-0.05}"
@@ -182,6 +183,7 @@ echo "MASTER_PORT: ${MASTER_PORT}"
 echo "Batch size: ${BS}"
 echo "Gradient accumulation steps: ${accumulations}"
 echo "Epochs: ${num_train_epochs}"
+echo "Gradient checkpointing: ${GRADIENT_CHECKPOINTING}"
 echo "Historical window: ${historical_window}"
 echo "Max context length: ${MAX_LENGTH}"
 echo "Audio description: ${audio_description}"
@@ -320,6 +322,7 @@ cat > "${OUTPUT_DIR}/run_config.json" <<EOF
   "persona_path": "${persona_path}",
   "batch_size": "${BS}",
   "gradient_accumulation_steps": "${accumulations}",
+  "gradient_checkpointing": "${GRADIENT_CHECKPOINTING}",
   "num_train_epochs": "${num_train_epochs}",
   "learning_rate": "${LR}",
   "lora": "${LORA}",
@@ -372,6 +375,7 @@ python main.py \
     --statistic_mode True \
     --data_percent "${data_percent}" \
     --seed "${SEED}" \
+    $(if [ "${GRADIENT_CHECKPOINTING}" = "True" ]; then echo "--gradient_checkpointing"; fi) \
     --use_mm_prefix "${USE_MM_PREFIX}" \
     --multimodal_manifest_dir "${MULTIMODAL_MANIFEST_DIR}" \
     --mm_audio_feature_dir "${MM_AUDIO_FEATURE_DIR}" \

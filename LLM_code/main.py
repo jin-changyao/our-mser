@@ -672,6 +672,8 @@ if args.lora:
     model = get_peft_model(model, lora_config)
 
 if args.gradient_checkpointing:
+    if hasattr(model, "config"):
+        model.config.use_cache = False
     if "chatglm" in args.model_name_or_path:
         model.supports_gradient_checkpointing = True
         model.transformer.gradient_checkpointing = True

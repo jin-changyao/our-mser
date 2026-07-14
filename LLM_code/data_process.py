@@ -133,6 +133,37 @@ def filter_iemocap_rows_by_text(df, conv_id, text):
     return conv_rows.loc[conv_rows['text'].apply(clean_utterance_text) == normalized_text]
 
 
+def build_iemocap_text_row_queues(df):
+    queues = {}
+    for conv_id, conv_rows in df.groupby('video_id', sort=False):
+        conv_map = {}
+        for _idx, row in conv_rows.iterrows():
+            text_key = clean_utterance_text(row.get('text', ''))
+            gender_key = str(row.get('gender', ''))
+            conv_map.setdefault((text_key, gender_key), []).append(row)
+            conv_map.setdefault((text_key, ''), []).append(row)
+        queues[conv_id] = conv_map
+    return queues
+
+
+def pop_iemocap_row_by_turn(row_queues, fallback_df, conv_id, text, gender=''):
+    text_key = clean_utterance_text(text)
+    conv_map = row_queues.get(conv_id, {})
+    candidates = conv_map.get((text_key, gender), [])
+    if not candidates:
+        candidates = conv_map.get((text_key, ''), [])
+    if candidates:
+        return candidates.pop(0)
+    filtered_rows = filter_iemocap_rows_by_text(fallback_df, conv_id, text)
+    if gender and not filtered_rows.empty and 'gender' in filtered_rows.columns:
+        gender_rows = filtered_rows.loc[filtered_rows['gender'] == gender]
+        if not gender_rows.empty:
+            return gender_rows.iloc[0]
+    if filtered_rows.empty:
+        raise ValueError(f'Cannot find IEMOCAP row for {conv_id}: {text}')
+    return filtered_rows.iloc[0]
+
+
 def load_persona_features(persona_path):
     if persona_path is None or persona_path == '' or persona_path == 'None':
         return {}
@@ -245,6 +276,8 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     elif dataset == 'iemocap':
         audio_feature = pd.read_csv('../speech_features/processed_iemocap_audio_features_5.csv')
         iemocap_file = pd.read_csv('../data/IEMOCAP_full_release/iemocap_full_dataset.csv')
+        iemocap_audio_queues = build_iemocap_text_row_queues(audio_feature)
+        iemocap_file_queues = build_iemocap_text_row_queues(iemocap_file)
     ###
 
     emotional_dict = {text_label:num_label for num_label, text_label in enumerate(label_set[dataset])}
@@ -255,6 +288,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     speaker_name_map_dict = {}
     sentence_dict = {}
     audio_path_dict = {}
+    utterance_id_dict = {}
     length = []
     data = pickle.load(open(f'../original_data/{dataset}/{dataset}.pkl','rb'))
     persona_features = load_persona_features(persona_path) if include_persona == 'True' else {}
@@ -420,6 +454,8 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                         # find audio path
                         path = audio_directory + "/" + filename
                         audio_path_dict[f'{conv_id}_{conv_turn}'] = path
+                        split_prefix = 'val' if mode == 'dev' else mode
+                        utterance_id_dict[f'{conv_id}_{conv_turn}'] = f'{split_prefix}_dia{diag_id}_utt{temp_conv_turn}'
                         # if conv_id==1149:
                         #     print(temp_conv_turn,path, conv_turn, target_utterance)
                         temp_conv_turn += 1
@@ -435,13 +471,15 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                         temp_content_str += f' {impression}'
                         speech_info_parts.append(str(impression))
             elif dataset == 'iemocap':
-                filtered_rows = filter_iemocap_rows_by_text(audio_feature, conv_id, target_sentence)
-                description = filtered_rows['description'].values[0]
-                impression = filtered_rows['impression'].values[0]
-                iemocap_rows = filter_iemocap_rows_by_text(iemocap_file, conv_id, target_sentence)
-                audio_path = iemocap_rows['path'].values[0]
+                target_gender = 'M' if speaker_label_dict[conv_id][conv_turn] == 0 else 'F'
+                audio_feature_row = pop_iemocap_row_by_turn(iemocap_audio_queues, audio_feature, conv_id, target_sentence, target_gender)
+                description = audio_feature_row['description']
+                impression = audio_feature_row['impression']
+                iemocap_row = pop_iemocap_row_by_turn(iemocap_file_queues, iemocap_file, conv_id, target_sentence, target_gender)
+                audio_path = iemocap_row['path']
                 audio_directory = '../data/IEMOCAP_full_release'
                 audio_path_dict[f'{conv_id}_{conv_turn}'] = audio_directory + '/' + audio_path
+                utterance_id_dict[f'{conv_id}_{conv_turn}'] = os.path.splitext(os.path.basename(audio_path))[0]
                 if audio_description == 'True':
                     temp_content_str += f' {description}'
                     speech_info_parts.append(str(description))
@@ -521,11 +559,13 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             if train_id.split('_')[0]=='125':
                 continue
             f_train.write(json.dumps({'path': audio_path_dict[train_id], \
+            'utterance_id': utterance_id_dict.get(train_id, ''),
             'input':content_task_dict[train_id],'target':f'{content_target_dict[train_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/test.json', 'w', encoding='utf-8') as f_test:
         for test_id in new_test_id:
             f_test.write(json.dumps({'path': audio_path_dict[test_id],\
+            'utterance_id': utterance_id_dict.get(test_id, ''),
             'input':content_task_dict[test_id],'target':f'{content_target_dict[test_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/valid.json', 'w', encoding='utf-8') as f_valid:
@@ -533,6 +573,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
             if valid_id.split('_')[0]=='1149':
                 continue
             f_valid.write(json.dumps({'path': audio_path_dict[valid_id], \
+            'utterance_id': utterance_id_dict.get(valid_id, ''),
             'input':content_task_dict[valid_id],'target':f'{content_target_dict[valid_id]}'}, ensure_ascii=False)+ '\n')
     
         

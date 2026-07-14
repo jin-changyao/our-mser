@@ -203,7 +203,7 @@ def inspect_split(dataset, split, legacy_rows, manifest_by_id, feature_dirs, spe
     for index, item in enumerate(legacy_rows):
         rendered = render_input(item.get("input", ""))
         target_text = extract_target_utterance_text(rendered)
-        utterance_id = manifest_key_from_path(dataset, split, item.get("path", ""))
+        utterance_id = item.get("utterance_id") or manifest_key_from_path(dataset, split, item.get("path", ""))
         manifest_row = manifest_by_id.get(utterance_id)
         problems = []
 
