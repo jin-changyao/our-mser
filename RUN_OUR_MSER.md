@@ -89,6 +89,38 @@ python diagnose_truncation.py \
   --out ../experiments/diagnosis_truncation_meld_1500.json
 ```
 
+## Diagnose Legacy + Manifest Alignment
+
+Use this before running a mixed setting such as legacy SpeechCue prompts plus C
+audio/video prefix features. It checks whether every legacy sample can find the
+matching C-manifest row, whether labels match, whether audio/video feature files
+exist, whether speech-text features can be found, and whether the prompt really
+contains speech information.
+
+IEMOCAP legacy speech-text + C features:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+python diagnose_legacy_manifest_alignment.py \
+  --dataset iemocap \
+  --legacy_data_dir ../PROCESSED_DATASET/iemocap/window/True_False_qwen_chat_prc \
+  --manifest_dir /home/pc/jcy/datasets/iemocap/features/splits_6way \
+  --speech_feature_dir ../speech_features \
+  --out ../experiments/diagnosis_align_iemocap_legacy_speech_manifest.json
+```
+
+MELD legacy speech-text + C features:
+
+```bash
+cd /home/pc/jcy/Our-MSER/LLM_code
+python diagnose_legacy_manifest_alignment.py \
+  --dataset meld \
+  --legacy_data_dir ../PROCESSED_DATASET/meld/window/True_False_qwen_chat_prc \
+  --manifest_dir /home/pc/jcy/datasets/meld/features/splits_7way \
+  --speech_feature_dir ../speech_features \
+  --out ../experiments/diagnosis_align_meld_legacy_speech_manifest.json
+```
+
 ## Summarize Experiment Results
 
 Run this after experiments finish. It scans all `preds_for_eval*.text` files
