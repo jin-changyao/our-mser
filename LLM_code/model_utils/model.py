@@ -119,17 +119,24 @@ class AVPrefixLLM(nn.Module):
     def _pool_target_text(self, target_text_input_ids, target_text_attention_mask, dtype):
         if target_text_input_ids is None or target_text_attention_mask is None:
             raise ValueError("TEXT_GUIDED_MM=True requires target_text_input_ids and target_text_attention_mask.")
-        text_outputs = self.llm(
-            input_ids=target_text_input_ids,
-            attention_mask=target_text_attention_mask,
-            output_hidden_states=True,
-            return_dict=True,
-            use_cache=False,
-        )
-        hidden = text_outputs.hidden_states[-1].to(dtype)
+        device = next(self.llm.parameters()).device
+        target_text_input_ids = target_text_input_ids.to(device)
+        target_text_attention_mask = target_text_attention_mask.to(device)
+        # The guide text is a conditioning signal. Keeping it out of the
+        # backward graph avoids reducing the same LLM/LoRA parameters twice
+        # when DeepSpeed gradient checkpointing is enabled.
+        with torch.no_grad():
+            text_outputs = self.llm(
+                input_ids=target_text_input_ids,
+                attention_mask=target_text_attention_mask,
+                output_hidden_states=True,
+                return_dict=True,
+                use_cache=False,
+            )
+            hidden = text_outputs.hidden_states[-1].to(dtype)
         mask = target_text_attention_mask.to(hidden.device).unsqueeze(-1).to(hidden.dtype)
         denom = mask.sum(dim=1).clamp_min(1.0)
-        return (hidden * mask).sum(dim=1) / denom
+        return ((hidden * mask).sum(dim=1) / denom).detach()
 
     def _collect_gate_stats(self, gates):
         stats = {}
