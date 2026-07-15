@@ -47,6 +47,13 @@ MM_VIDEO_FEATURE_DIR="${MM_VIDEO_FEATURE_DIR:-clip-vit-large-patch14-UTT}"
 MM_AUDIO_TOKENS="${MM_AUDIO_TOKENS:-4}"
 MM_VIDEO_TOKENS="${MM_VIDEO_TOKENS:-4}"
 MM_PROJECTOR_DROPOUT="${MM_PROJECTOR_DROPOUT:-0.05}"
+TEXT_GUIDED_MM="${TEXT_GUIDED_MM:-False}"
+TEXT_GUIDE_SOURCE="${TEXT_GUIDE_SOURCE:-target_text}"
+TEXT_GUIDED_MODE="${TEXT_GUIDED_MODE:-film_gate}"
+TEXT_GUIDED_AUDIO="${TEXT_GUIDED_AUDIO:-True}"
+TEXT_GUIDED_VIDEO="${TEXT_GUIDED_VIDEO:-True}"
+LOG_MM_GATES="${LOG_MM_GATES:-False}"
+TARGET_TEXT_MAX_LENGTH="${TARGET_TEXT_MAX_LENGTH:-128}"
 
 MODELS_ROOT="${MODELS_ROOT:-/home/pc/jcy/models}"
 DATASETS_ROOT="${DATASETS_ROOT:-/home/pc/jcy/datasets}"
@@ -167,6 +174,16 @@ elif [ -n "${data_format}" ]; then
 fi
 if [ "${USE_MM_PREFIX}" = "True" ]; then
     task="${task}_avprefix_a${MM_AUDIO_TOKENS}_v${MM_VIDEO_TOKENS}"
+    if [ "${TEXT_GUIDED_MM}" = "True" ]; then
+        task="${task}_textguided_${TEXT_GUIDED_MODE}"
+        if [ "${TEXT_GUIDED_AUDIO}" = "True" ] && [ "${TEXT_GUIDED_VIDEO}" != "True" ]; then
+            task="${task}_audio"
+        elif [ "${TEXT_GUIDED_AUDIO}" != "True" ] && [ "${TEXT_GUIDED_VIDEO}" = "True" ]; then
+            task="${task}_video"
+        elif [ "${TEXT_GUIDED_AUDIO}" = "True" ] && [ "${TEXT_GUIDED_VIDEO}" = "True" ]; then
+            task="${task}_av"
+        fi
+    fi
 fi
 if [ "${DATA_SOURCE}" != "manifest" ] && [ "${USE_FEATURE_TEXT}" = "True" ]; then
     task="${task}_featuretext"
@@ -210,6 +227,12 @@ echo "MM audio feature dir: ${MM_AUDIO_FEATURE_DIR}"
 echo "MM video feature dir: ${MM_VIDEO_FEATURE_DIR}"
 echo "MM audio tokens: ${MM_AUDIO_TOKENS}"
 echo "MM video tokens: ${MM_VIDEO_TOKENS}"
+echo "Text-guided MM: ${TEXT_GUIDED_MM}"
+echo "Text guide source: ${TEXT_GUIDE_SOURCE}"
+echo "Text-guided mode: ${TEXT_GUIDED_MODE}"
+echo "Text-guided audio: ${TEXT_GUIDED_AUDIO}"
+echo "Text-guided video: ${TEXT_GUIDED_VIDEO}"
+echo "Log MM gates: ${LOG_MM_GATES}"
 echo "******************************************************************************************"
 
 persona_tag=""
@@ -342,6 +365,13 @@ cat > "${OUTPUT_DIR}/run_config.json" <<EOF
   "mm_audio_tokens": "${MM_AUDIO_TOKENS}",
   "mm_video_tokens": "${MM_VIDEO_TOKENS}",
   "mm_projector_dropout": "${MM_PROJECTOR_DROPOUT}",
+  "text_guided_mm": "${TEXT_GUIDED_MM}",
+  "text_guide_source": "${TEXT_GUIDE_SOURCE}",
+  "text_guided_mode": "${TEXT_GUIDED_MODE}",
+  "text_guided_audio": "${TEXT_GUIDED_AUDIO}",
+  "text_guided_video": "${TEXT_GUIDED_VIDEO}",
+  "log_mm_gates": "${LOG_MM_GATES}",
+  "target_text_max_length": "${TARGET_TEXT_MAX_LENGTH}",
   "cuda_visible_devices": "${CUDA_VISIBLE_DEVICES}",
   "master_addr": "${MASTER_ADDR}",
   "master_port": "${MASTER_PORT}",
@@ -382,4 +412,11 @@ python main.py \
     --mm_video_feature_dir "${MM_VIDEO_FEATURE_DIR}" \
     --mm_audio_tokens "${MM_AUDIO_TOKENS}" \
     --mm_video_tokens "${MM_VIDEO_TOKENS}" \
-    --mm_projector_dropout "${MM_PROJECTOR_DROPOUT}"
+    --mm_projector_dropout "${MM_PROJECTOR_DROPOUT}" \
+    --text_guided_mm "${TEXT_GUIDED_MM}" \
+    --text_guide_source "${TEXT_GUIDE_SOURCE}" \
+    --text_guided_mode "${TEXT_GUIDED_MODE}" \
+    --text_guided_audio "${TEXT_GUIDED_AUDIO}" \
+    --text_guided_video "${TEXT_GUIDED_VIDEO}" \
+    --log_mm_gates "${LOG_MM_GATES}" \
+    --target_text_max_length "${TARGET_TEXT_MAX_LENGTH}"

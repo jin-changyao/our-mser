@@ -435,6 +435,40 @@ parser.add_argument(
     type=float,
     default=0.05
 )
+parser.add_argument(
+    "--text_guided_mm",
+    default='False',
+    help='Whether to modulate multimodal prefix tokens with target utterance text.'
+)
+parser.add_argument(
+    "--text_guide_source",
+    type=str,
+    default='target_text',
+    choices=['target_text']
+)
+parser.add_argument(
+    "--text_guided_mode",
+    type=str,
+    default='film_gate',
+    choices=['film_gate']
+)
+parser.add_argument(
+    "--text_guided_audio",
+    default='True'
+)
+parser.add_argument(
+    "--text_guided_video",
+    default='True'
+)
+parser.add_argument(
+    "--log_mm_gates",
+    default='False'
+)
+parser.add_argument(
+    "--target_text_max_length",
+    type=int,
+    default=128
+)
 
 args = parser.parse_args()
 do_sample = args.top_k is not None or args.top_p is not None or args.num_beams > 1 or args.temp is not None
@@ -449,30 +483,29 @@ args.temp is not None (temp is a parameter that controls the temperature of soft
 # This variable is likely being used later in the code to determine whether or not to use sampling when generating text.
 '''
 
-if args.do_train == 'True':
-    args.do_train = True
-else:
-    args.do_train = False
+def str_to_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() == 'true'
 
-if args.do_eval == 'True': 
-    args.do_eval = True
-else:
-    args.do_eval = False
 
-if args.emotion_prediction == 'True':
-    args.emotion_prediction = True
-else:
-    args.emotion_prediction = False
-
-if args.lora == 'True':
-    args.lora = True
-else:
-    args.lora = False
-
-if args.use_mm_prefix == 'True':
-    args.use_mm_prefix = True
-else:
-    args.use_mm_prefix = False
+args.do_train = str_to_bool(args.do_train)
+args.do_eval = str_to_bool(args.do_eval)
+args.emotion_prediction = str_to_bool(args.emotion_prediction)
+args.lora = str_to_bool(args.lora)
+args.use_mm_prefix = str_to_bool(args.use_mm_prefix)
+args.text_guided_mm = str_to_bool(args.text_guided_mm)
+args.text_guided_audio = str_to_bool(args.text_guided_audio)
+args.text_guided_video = str_to_bool(args.text_guided_video)
+args.log_mm_gates = str_to_bool(args.log_mm_gates)
+if args.text_guided_mm and not args.use_mm_prefix:
+    raise ValueError("TEXT_GUIDED_MM requires USE_MM_PREFIX=True.")
+if args.text_guided_mm and args.text_guide_source != "target_text":
+    raise ValueError("Only TEXT_GUIDE_SOURCE=target_text is supported.")
+if args.text_guided_mm and args.text_guided_mode != "film_gate":
+    raise ValueError("Only TEXT_GUIDED_MODE=film_gate is supported.")
+if args.text_guided_mm and not (args.text_guided_audio or args.text_guided_video):
+    raise ValueError("TEXT_GUIDED_MM requires TEXT_GUIDED_AUDIO=True or TEXT_GUIDED_VIDEO=True.")
 
 # eval_result_path = args.eval_result_path if args.eval_result_path is not None else args.output_dir
 # os.makedirs(eval_result_path, exist_ok=True)
@@ -528,6 +561,13 @@ model_args = {
     "mm_audio_tokens": args.mm_audio_tokens,
     "mm_video_tokens": args.mm_video_tokens,
     "mm_projector_dropout": args.mm_projector_dropout,
+    "text_guided_mm": args.text_guided_mm,
+    "text_guide_source": args.text_guide_source,
+    "text_guided_mode": args.text_guided_mode,
+    "text_guided_audio": args.text_guided_audio,
+    "text_guided_video": args.text_guided_video,
+    "log_mm_gates": args.log_mm_gates,
+    "target_text_max_length": args.target_text_max_length,
 }
 args = ModelArgs()
 # pdb.set_trace()
@@ -621,7 +661,55 @@ def _get_input_dict(batch):
     if args.use_mm_prefix:
         input_dict["mm_audio_features"] = batch["mm_audio_features"].to(device)
         input_dict["mm_video_features"] = batch["mm_video_features"].to(device)
+        if args.text_guided_mm:
+            input_dict["target_text_input_ids"] = batch["target_text_input_ids"].to(device)
+            input_dict["target_text_attention_mask"] = batch["target_text_attention_mask"].to(device)
     return input_dict
+
+
+def unwrap_model(module):
+    return module.module if hasattr(module, "module") else module
+
+
+def get_last_mm_gate_stats(module):
+    wrapped = unwrap_model(module)
+    return getattr(wrapped, "last_mm_gate_stats", {})
+
+
+def append_mm_gate_stats(records, phase, epoch, step, module):
+    if not args.log_mm_gates:
+        return
+    stats = get_last_mm_gate_stats(module)
+    if not stats:
+        return
+    record = {"phase": phase, "epoch": epoch, "step": step}
+    record.update(stats)
+    records.append(record)
+
+
+def summarize_mm_gate_records(records, phase, epoch):
+    phase_records = [r for r in records if r.get("phase") == phase and r.get("epoch") == epoch]
+    if not phase_records:
+        return None
+    summary = {"phase": phase, "epoch": epoch, "num_batches": len(phase_records)}
+    keys = sorted(k for k in phase_records[0] if k.startswith("gate_"))
+    for key in keys:
+        values = [r[key] for r in phase_records if key in r]
+        if values:
+            summary[key] = float(np.mean(values))
+    return summary
+
+
+def write_mm_gate_summary(records, phase, epoch):
+    if not args.log_mm_gates:
+        return
+    summary = summarize_mm_gate_records(records, phase, epoch)
+    if summary is None:
+        return
+    path = os.path.join(args.output_dir, "mm_gate_stats.jsonl")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(summary) + "\n")
+    print(f"MM gate stats ({phase}, epoch {epoch}): {summary}")
 
 ## prepare model
 if "chatglm" in args.model_name_or_path:
@@ -692,7 +780,10 @@ if args.use_mm_prefix:
         "Multimodal prefix enabled: "
         f"audio {args.mm_audio_feature_dir} -> {args.mm_audio_tokens} tokens, "
         f"video {args.mm_video_feature_dir} -> {args.mm_video_tokens} tokens, "
-        f"hidden_size={args.mm_hidden_size}"
+        f"hidden_size={args.mm_hidden_size}, "
+        f"text_guided_mm={args.text_guided_mm}, "
+        f"text_guided_audio={args.text_guided_audio}, "
+        f"text_guided_video={args.text_guided_video}"
     )
 
 
@@ -777,6 +868,7 @@ if __name__ == "__main__":
         global_steps = 0
         best_f1_score = 0
         f1_scores = []
+        mm_gate_records = []
         for epoch in range(args.num_train_epochs):
             model.train()
             batch_iterator = tqdm(
@@ -791,6 +883,7 @@ if __name__ == "__main__":
 
                     batch = _get_input_dict(batch)
                     outputs = model(**batch)
+                    append_mm_gate_stats(mm_gate_records, "train", epoch, step, model)
                     # print(outputs.loss, outputs.logits.shape,type(outputs))
                     # kl_index = torch.tensor(-2)
                     # res, pre = outputs.logits[:,kl_index,:]
@@ -805,6 +898,7 @@ if __name__ == "__main__":
                 else:
                     batch = _get_input_dict(batch)
                     outputs = model(**batch)
+                    append_mm_gate_stats(mm_gate_records, "train", epoch, step, model)
                     loss = outputs.loss
 
                 model.backward(loss)
@@ -826,6 +920,7 @@ if __name__ == "__main__":
                 # model starts to evaluation
             
             model.eval()
+            write_mm_gate_summary(mm_gate_records, "train", epoch)
             targets = list(df_dev["output"])
             eval_sampler = SequentialSampler(dev_dataset)
             eval_dataloader = DataLoader(dev_dataset, batch_size=args.eval_batch_size, sampler=eval_sampler, collate_fn=dev_collator, num_workers=8)
@@ -866,8 +961,10 @@ if __name__ == "__main__":
                             num_return_sequences=1
                             # stopping_criteria=StoppingCriteriaList([stop_criteria]
                         )
+                    append_mm_gate_stats(mm_gate_records, "eval", epoch, eval_step, model)
                 outputs[outputs[:, :] < 0] = tokenizer.pad_token_id
                 all_outputs.extend(outputs)
+            write_mm_gate_summary(mm_gate_records, "eval", epoch)
             eval_inputs_iter = [tokenizer.decode(e_id, skip_special_tokens=True, clean_up_tokenization_spaces=True) for e_id in eval_inputs_iter]
             # all_outputs
             outs = [tokenizer.decode(o_id, skip_special_tokens=True, clean_up_tokenization_spaces=True) for o_id in all_outputs]
@@ -950,6 +1047,7 @@ if __name__ == "__main__":
     if not args.do_train and args.do_eval:
         # model starts to evaluation
         model.eval()
+        mm_gate_records = []
         targets = list(df_dev["output"])
         eval_sampler = SequentialSampler(dev_dataset)
         eval_dataloader = DataLoader(dev_dataset, batch_size=args.eval_batch_size, sampler=eval_sampler, collate_fn=dev_collator, num_workers=8)
@@ -991,8 +1089,10 @@ if __name__ == "__main__":
                         num_return_sequences=1
                         # stopping_criteria=StoppingCriteriaList([stop_criteria])
                     )
+                append_mm_gate_stats(mm_gate_records, "eval", 0, eval_step, model)
             outputs[outputs[:, :] < 0] = tokenizer.pad_token_id
             all_outputs.extend(outputs)
+        write_mm_gate_summary(mm_gate_records, "eval", 0)
         eval_inputs_iter = [tokenizer.decode(e_id, skip_special_tokens=True, clean_up_tokenization_spaces=True) for e_id in eval_inputs_iter]
         # all_outputs
         outs = [tokenizer.decode(o_id, skip_special_tokens=True, clean_up_tokenization_spaces=True) for o_id in all_outputs]

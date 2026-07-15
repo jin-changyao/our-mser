@@ -283,6 +283,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
     emotional_dict = {text_label:num_label for num_label, text_label in enumerate(label_set[dataset])}
     content_target_dict = {}
     content_task_dict = {}
+    target_utterance_dict = {}
     speaker_label_dict = {}
     speaker_name_dict = {}
     speaker_name_map_dict = {}
@@ -418,6 +419,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                         temp_content_str += f' ({avg_pitch} pitch with {pitch_variation} variation)'
             content_target_dict[f'{conv_id}_{conv_turn}'] = label_set[dataset][label_dict[conv_id][conv_turn]]
             target_utterance = context_lines[-1]
+            target_utterance_dict[f'{conv_id}_{conv_turn}'] = target_utterance
             target_sentence = clean_utterance_text(sentence_dict[conv_id][conv_turn])
             temp_content_str += ' ###'
             
@@ -560,12 +562,14 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 continue
             f_train.write(json.dumps({'path': audio_path_dict[train_id], \
             'utterance_id': utterance_id_dict.get(train_id, ''),
+            'target_utterance': target_utterance_dict.get(train_id, ''),
             'input':content_task_dict[train_id],'target':f'{content_target_dict[train_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/test.json', 'w', encoding='utf-8') as f_test:
         for test_id in new_test_id:
             f_test.write(json.dumps({'path': audio_path_dict[test_id],\
             'utterance_id': utterance_id_dict.get(test_id, ''),
+            'target_utterance': target_utterance_dict.get(test_id, ''),
             'input':content_task_dict[test_id],'target':f'{content_target_dict[test_id]}'}, ensure_ascii=False)+ '\n')
 
     with open(f'{data_path}/valid.json', 'w', encoding='utf-8') as f_valid:
@@ -574,6 +578,7 @@ def process_dataset(dataset, window=110, audio_description='True', audio_impress
                 continue
             f_valid.write(json.dumps({'path': audio_path_dict[valid_id], \
             'utterance_id': utterance_id_dict.get(valid_id, ''),
+            'target_utterance': target_utterance_dict.get(valid_id, ''),
             'input':content_task_dict[valid_id],'target':f'{content_target_dict[valid_id]}'}, ensure_ascii=False)+ '\n')
     
         

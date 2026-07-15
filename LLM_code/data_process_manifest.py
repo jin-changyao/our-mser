@@ -130,6 +130,8 @@ def process_split(dataset, rows, window, prompt_style):
             examples.append(
                 {
                     "path": row["utterance_id"],
+                    "utterance_id": row["utterance_id"],
+                    "target_utterance": target_utterance,
                     "input": prompt,
                     "target": row["label"],
                 }

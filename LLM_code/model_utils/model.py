@@ -47,6 +47,37 @@ class AVPrefixProjector(nn.Module):
         return tokens.view(features.size(0), self.num_tokens, self.hidden_size)
 
 
+class TextGuidedPrefixAdapter(nn.Module):
+    def __init__(self, hidden_size, num_tokens, dropout=0.05):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.num_tokens = num_tokens
+        self.base_norm = nn.LayerNorm(hidden_size)
+        self.film = nn.Sequential(
+            nn.LayerNorm(hidden_size),
+            nn.Linear(hidden_size, hidden_size),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, hidden_size * 2),
+        )
+        self.gate = nn.Sequential(
+            nn.LayerNorm(hidden_size * 2),
+            nn.Linear(hidden_size * 2, hidden_size),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, 1),
+        )
+
+    def forward(self, prefix_tokens, text_rep):
+        base = self.base_norm(prefix_tokens)
+        gamma, beta = self.film(text_rep).chunk(2, dim=-1)
+        guided = base * (1.0 + gamma.unsqueeze(1)) + beta.unsqueeze(1)
+        pooled_base = base.mean(dim=1)
+        gate = torch.sigmoid(self.gate(torch.cat([text_rep, pooled_base], dim=-1)))
+        prefix = gate.unsqueeze(1) * guided + (1.0 - gate.unsqueeze(1)) * base
+        return prefix, gate.squeeze(-1)
+
+
 class AVPrefixLLM(nn.Module):
     def __init__(
         self,
@@ -68,8 +99,59 @@ class AVPrefixLLM(nn.Module):
             config.mm_video_tokens,
             config.mm_projector_dropout,
         )
+        self.text_guided_mm = bool(getattr(config, "text_guided_mm", False))
+        self.text_guided_audio = bool(getattr(config, "text_guided_audio", True))
+        self.text_guided_video = bool(getattr(config, "text_guided_video", True))
+        self.log_mm_gates = bool(getattr(config, "log_mm_gates", False))
+        self.last_mm_gate_stats = {}
+        if self.text_guided_mm:
+            self.audio_adapter = TextGuidedPrefixAdapter(
+                config.mm_hidden_size,
+                config.mm_audio_tokens,
+                config.mm_projector_dropout,
+            )
+            self.video_adapter = TextGuidedPrefixAdapter(
+                config.mm_hidden_size,
+                config.mm_video_tokens,
+                config.mm_projector_dropout,
+            )
 
-    def build_inputs_embeds(self, input_ids, attention_mask, mm_audio_features, mm_video_features, labels=None):
+    def _pool_target_text(self, target_text_input_ids, target_text_attention_mask, dtype):
+        if target_text_input_ids is None or target_text_attention_mask is None:
+            raise ValueError("TEXT_GUIDED_MM=True requires target_text_input_ids and target_text_attention_mask.")
+        text_outputs = self.llm(
+            input_ids=target_text_input_ids,
+            attention_mask=target_text_attention_mask,
+            output_hidden_states=True,
+            return_dict=True,
+            use_cache=False,
+        )
+        hidden = text_outputs.hidden_states[-1].to(dtype)
+        mask = target_text_attention_mask.to(hidden.device).unsqueeze(-1).to(hidden.dtype)
+        denom = mask.sum(dim=1).clamp_min(1.0)
+        return (hidden * mask).sum(dim=1) / denom
+
+    def _collect_gate_stats(self, gates):
+        stats = {}
+        for name, gate in gates.items():
+            gate = gate.detach().float()
+            stats[f"{name}_mean"] = gate.mean().item()
+            stats[f"{name}_std"] = gate.std(unbiased=False).item()
+            stats[f"{name}_min"] = gate.min().item()
+            stats[f"{name}_max"] = gate.max().item()
+        self.last_mm_gate_stats = stats
+        return stats
+
+    def build_inputs_embeds(
+        self,
+        input_ids,
+        attention_mask,
+        mm_audio_features,
+        mm_video_features,
+        labels=None,
+        target_text_input_ids=None,
+        target_text_attention_mask=None,
+    ):
         input_ids = input_ids.clone()
         input_ids[input_ids == -1] = 0
         embed_tokens = get_lm_input_embeddings(self.llm)
@@ -77,7 +159,27 @@ class AVPrefixLLM(nn.Module):
         dtype = text_embeds.dtype
         audio_tokens = self.audio_projector(mm_audio_features.to(text_embeds.device).to(dtype))
         video_tokens = self.video_projector(mm_video_features.to(text_embeds.device).to(dtype))
-        prefix_embeds = torch.cat([audio_tokens, video_tokens], dim=1)
+        if self.text_guided_mm:
+            text_rep = self._pool_target_text(
+                target_text_input_ids=target_text_input_ids,
+                target_text_attention_mask=target_text_attention_mask,
+                dtype=dtype,
+            )
+            prefix_parts = []
+            gates = {}
+            if self.text_guided_audio:
+                audio_tokens, gates["gate_a"] = self.audio_adapter(audio_tokens, text_rep)
+                prefix_parts.append(audio_tokens)
+            if self.text_guided_video:
+                video_tokens, gates["gate_v"] = self.video_adapter(video_tokens, text_rep)
+                prefix_parts.append(video_tokens)
+            if not prefix_parts:
+                raise ValueError("TEXT_GUIDED_MM=True requires TEXT_GUIDED_AUDIO=True or TEXT_GUIDED_VIDEO=True.")
+            prefix_embeds = torch.cat(prefix_parts, dim=1)
+            if self.log_mm_gates:
+                self._collect_gate_stats(gates)
+        else:
+            prefix_embeds = torch.cat([audio_tokens, video_tokens], dim=1)
         inputs_embeds = torch.cat([prefix_embeds, text_embeds], dim=1)
 
         prefix_mask = torch.ones(
@@ -105,6 +207,8 @@ class AVPrefixLLM(nn.Module):
         mm_audio_features,
         mm_video_features,
         labels=None,
+        target_text_input_ids=None,
+        target_text_attention_mask=None,
         **kwargs,
     ):
         inputs_embeds, attention_mask, labels = self.build_inputs_embeds(
@@ -113,6 +217,8 @@ class AVPrefixLLM(nn.Module):
             mm_audio_features=mm_audio_features,
             mm_video_features=mm_video_features,
             labels=labels,
+            target_text_input_ids=target_text_input_ids,
+            target_text_attention_mask=target_text_attention_mask,
         )
         return self.llm(
             inputs_embeds=inputs_embeds,
@@ -128,6 +234,8 @@ class AVPrefixLLM(nn.Module):
         attention_mask,
         mm_audio_features,
         mm_video_features,
+        target_text_input_ids=None,
+        target_text_attention_mask=None,
         **kwargs,
     ):
         inputs_embeds, attention_mask, _ = self.build_inputs_embeds(
@@ -136,6 +244,8 @@ class AVPrefixLLM(nn.Module):
             mm_audio_features=mm_audio_features,
             mm_video_features=mm_video_features,
             labels=None,
+            target_text_input_ids=target_text_input_ids,
+            target_text_attention_mask=target_text_attention_mask,
         )
         return self.llm.generate(
             inputs_embeds=inputs_embeds,

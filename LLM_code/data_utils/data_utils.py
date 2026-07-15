@@ -106,6 +106,7 @@ def read_data(file_name, percent, random_seed, args=None):
     inputs = []
     targets = []
     paths = []
+    target_utterances = []
     audio_feature_paths = []
     video_feature_paths = []
     missing_manifest = []
@@ -115,6 +116,7 @@ def read_data(file_name, percent, random_seed, args=None):
         inputs.append(d['input'])
         targets.append(d['target'])
         paths.append(d['path'])
+        target_utterances.append(d.get("target_utterance") or extract_target_utterance(d.get("input", "")))
         if use_mm_prefix:
             utterance_id = d.get("utterance_id") or manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
             manifest_row = manifest_by_id.get(utterance_id)
@@ -141,7 +143,7 @@ def read_data(file_name, percent, random_seed, args=None):
             f"Missing {len(missing_manifest)} multimodal manifest rows for {file_name}. "
             f"Examples: {missing_manifest[:10]}"
         )
-    dict_ = {'input': inputs, 'output': targets, 'path': paths}
+    dict_ = {'input': inputs, 'output': targets, 'path': paths, "target_utterance": target_utterances}
     if use_mm_prefix:
         dict_["audio_feature_path"] = audio_feature_paths
         dict_["video_feature_path"] = video_feature_paths
@@ -176,16 +178,17 @@ class Seq2SeqDataset(Dataset):
         inputs = list(data["input"])
         outputs = list(data['output'])
         paths = list(data['path'])
+        target_utterances = list(data.get("target_utterance", [""] * len(inputs)))
         self.use_mm_prefix = getattr(args, "use_mm_prefix", False)
         if self.use_mm_prefix:
             audio_feature_paths = list(data["audio_feature_path"])
             video_feature_paths = list(data["video_feature_path"])
             self.examples = [
-                [i, o, p, a, v]
-                for i, o, p, a, v in zip(inputs, outputs, paths, audio_feature_paths, video_feature_paths)
+                [i, o, p, t, a, v]
+                for i, o, p, t, a, v in zip(inputs, outputs, paths, target_utterances, audio_feature_paths, video_feature_paths)
             ]
         else:
-            self.examples = [[i, o, p] for i, o, p in zip(inputs, outputs, paths)]       
+            self.examples = [[i, o, p, t] for i, o, p, t in zip(inputs, outputs, paths, target_utterances)]
 
     def __len__(self):
         return len(self.examples)
@@ -214,6 +217,26 @@ def render_chat_inputs(example_inputs, tokenizer):
     return [render_chat_input(example_input, tokenizer) for example_input in example_inputs]
 
 
+def extract_target_utterance(example_input):
+    if isinstance(example_input, list):
+        for message in example_input:
+            content = message.get("content", "")
+            extracted = extract_target_utterance(content)
+            if extracted:
+                return extracted
+        return ""
+    text = str(example_input)
+    marker = "Target utterance:\n"
+    if marker in text:
+        target = text.split(marker, 1)[1].split("\n\n", 1)[0].strip()
+        return target
+    import re
+    match = re.search(r"emotional label of <(.+?)>", text)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
 class Seq2SeqCollator(object):
     def __init__(self, args, tokenizer, mode="train"):
         self.tokenizer = tokenizer
@@ -231,8 +254,18 @@ class Seq2SeqCollator(object):
         
         if self.feature == 'text':
             if getattr(self.args, "use_mm_prefix", False):
-                inputs["mm_audio_features"] = self.load_numpy_features([d[3] for d in batch])
-                inputs["mm_video_features"] = self.load_numpy_features([d[4] for d in batch])
+                inputs["mm_audio_features"] = self.load_numpy_features([d[4] for d in batch])
+                inputs["mm_video_features"] = self.load_numpy_features([d[5] for d in batch])
+                if getattr(self.args, "text_guided_mm", False):
+                    target_text = self.tokenizer(
+                        [d[3] for d in batch],
+                        max_length=getattr(self.args, "target_text_max_length", 128),
+                        truncation=True,
+                        padding=True,
+                        return_tensors="pt",
+                    )
+                    inputs["target_text_input_ids"] = target_text["input_ids"]
+                    inputs["target_text_attention_mask"] = target_text["attention_mask"]
             return inputs
         
         paths = [d[2] for d in batch]
@@ -389,6 +422,13 @@ class ModelArgs:
     mm_video_tokens: int = 4
     mm_projector_dropout: float = 0.05
     mm_hidden_size: int = 3584
+    text_guided_mm: bool = False
+    text_guide_source: str = "target_text"
+    text_guided_mode: str = "film_gate"
+    text_guided_audio: bool = True
+    text_guided_video: bool = True
+    log_mm_gates: bool = False
+    target_text_max_length: int = 128
 
     def save(self, output_dir):
         os.makedirs(output_dir, exist_ok=True)
