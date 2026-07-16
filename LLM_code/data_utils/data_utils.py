@@ -64,13 +64,52 @@ def manifest_key_from_path(dataset, split, path):
 
 def load_multimodal_manifest(manifest_dir, dataset, split):
     if not manifest_dir:
-        return {}
+        return {}, {}
     split_name = "valid" if split == "dev" else split
     manifest_path = Path(manifest_dir) / f"{dataset}_multimodal_{split_name}.jsonl"
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Multimodal manifest not found: {manifest_path}")
     rows = read_jsonl(manifest_path)
-    return {row["utterance_id"]: row for row in rows}
+    by_id = {row["utterance_id"]: row for row in rows}
+    by_meld_old_turn = {}
+    if dataset == "meld":
+        for row in rows:
+            old_dialog_id = row.get("old_dialog_id", "")
+            old_turn_id = row.get("old_turn_id", "")
+            if old_dialog_id == "" or old_turn_id == "":
+                continue
+            by_meld_old_turn[(int(old_dialog_id), int(old_turn_id))] = row
+    return by_id, by_meld_old_turn
+
+
+def meld_old_turn_key_from_utterance_id(split, utterance_id):
+    stem = str(utterance_id)
+    parts = stem.split("_")
+    if len(parts) != 3 or not parts[1].startswith("dia") or not parts[2].startswith("utt"):
+        return None
+    split_prefix = parts[0]
+    local_dialog_id = int(parts[1].replace("dia", ""))
+    turn_id = int(parts[2].replace("utt", ""))
+    split_name = {"val": "valid", "dev": "valid"}.get(split_prefix, split_prefix)
+    if split_name not in {"train", "valid", "test"}:
+        split_name = "valid" if split == "dev" else split
+    offsets = {"train": 0, "valid": 1039, "test": 1153}
+    return offsets[split_name] + local_dialog_id, turn_id
+
+
+def lookup_multimodal_manifest_row(dataset, split, utterance_id, manifest_by_id, manifest_by_meld_old_turn):
+    manifest_row = manifest_by_id.get(utterance_id)
+    if manifest_row is not None:
+        return manifest_row, "utterance_id"
+    if dataset != "meld":
+        return None, ""
+    old_turn_key = meld_old_turn_key_from_utterance_id(split, utterance_id)
+    if old_turn_key is None:
+        return None, ""
+    manifest_row = manifest_by_meld_old_turn.get(old_turn_key)
+    if manifest_row is None:
+        return None, ""
+    return manifest_row, "meld_old_turn"
 
 
 def infer_feature_root_from_manifest_dir(manifest_dir):
@@ -97,8 +136,9 @@ def read_data(file_name, percent, random_seed, args=None):
     skip_missing_mm = bool(args is not None and getattr(args, "skip_missing_mm", False))
     split = infer_split_from_file_name(file_name)
     manifest_by_id = {}
+    manifest_by_meld_old_turn = {}
     if use_mm_prefix:
-        manifest_by_id = load_multimodal_manifest(
+        manifest_by_id, manifest_by_meld_old_turn = load_multimodal_manifest(
             getattr(args, "multimodal_manifest_dir", ""),
             getattr(args, "dataset", ""),
             split,
@@ -112,6 +152,7 @@ def read_data(file_name, percent, random_seed, args=None):
     video_feature_paths = []
     missing_manifest = []
     skipped_missing_mm = []
+    meld_old_turn_matches = 0
     for index, d in enumerate(data):
         if pd.isnull(d['target']) or pd.isna(d['target']):
             continue
@@ -119,7 +160,13 @@ def read_data(file_name, percent, random_seed, args=None):
         video_path = ""
         if use_mm_prefix:
             utterance_id = d.get("utterance_id") or manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
-            manifest_row = manifest_by_id.get(utterance_id)
+            manifest_row, match_source = lookup_multimodal_manifest_row(
+                getattr(args, "dataset", ""),
+                split,
+                utterance_id,
+                manifest_by_id,
+                manifest_by_meld_old_turn,
+            )
             if manifest_row is None:
                 audio_path = fallback_feature_path(
                     args.multimodal_manifest_dir,
@@ -132,6 +179,8 @@ def read_data(file_name, percent, random_seed, args=None):
                     utterance_id,
                 )
             else:
+                if match_source == "meld_old_turn":
+                    meld_old_turn_matches += 1
                 audio_path = manifest_row.get(f"feature_{args.mm_audio_feature_dir}", "")
                 video_path = manifest_row.get(f"feature_{args.mm_video_feature_dir}", "")
             if not audio_path or not video_path:
@@ -158,6 +207,10 @@ def read_data(file_name, percent, random_seed, args=None):
                 f"Examples: {missing_manifest[:10]}. "
                 "Set SKIP_MISSING_MM=True to drop these rows for multimodal-prefix runs."
             )
+    if meld_old_turn_matches:
+        print(
+            f"Aligned {meld_old_turn_matches} MELD rows by old_dialog_id/old_turn_id fallback for {file_name}."
+        )
     dict_ = {'input': inputs, 'output': targets, 'path': paths, "target_utterance": target_utterances}
     if use_mm_prefix:
         dict_["audio_feature_path"] = audio_feature_paths
