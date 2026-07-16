@@ -436,6 +436,11 @@ parser.add_argument(
     default=0.05
 )
 parser.add_argument(
+    "--skip_missing_mm",
+    default='False',
+    help='Drop rows whose multimodal manifest/features are missing instead of raising an error.'
+)
+parser.add_argument(
     "--text_guided_mm",
     default='False',
     help='Whether to modulate multimodal prefix tokens with target utterance text.'
@@ -494,6 +499,7 @@ args.do_eval = str_to_bool(args.do_eval)
 args.emotion_prediction = str_to_bool(args.emotion_prediction)
 args.lora = str_to_bool(args.lora)
 args.use_mm_prefix = str_to_bool(args.use_mm_prefix)
+args.skip_missing_mm = str_to_bool(args.skip_missing_mm)
 args.text_guided_mm = str_to_bool(args.text_guided_mm)
 args.text_guided_audio = str_to_bool(args.text_guided_audio)
 args.text_guided_video = str_to_bool(args.text_guided_video)
@@ -561,6 +567,7 @@ model_args = {
     "mm_audio_tokens": args.mm_audio_tokens,
     "mm_video_tokens": args.mm_video_tokens,
     "mm_projector_dropout": args.mm_projector_dropout,
+    "skip_missing_mm": args.skip_missing_mm,
     "text_guided_mm": args.text_guided_mm,
     "text_guide_source": args.text_guide_source,
     "text_guided_mode": args.text_guided_mode,

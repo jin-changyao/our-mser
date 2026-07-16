@@ -194,6 +194,7 @@ def summarize_run(run_dir, experiments_root):
         "log_mm_gates": bool_text(get_first(run_config.get("log_mm_gates"), model_args.get("log_mm_gates"))),
         "mm_audio_tokens": get_first(run_config.get("mm_audio_tokens"), model_args.get("mm_audio_tokens"), flags.get("mm_audio_tokens_from_name")),
         "mm_video_tokens": get_first(run_config.get("mm_video_tokens"), model_args.get("mm_video_tokens"), flags.get("mm_video_tokens_from_name")),
+        "skip_missing_mm": bool_text(get_first(run_config.get("skip_missing_mm"), model_args.get("skip_missing_mm"))),
         "mm_audio_feature_dir": get_first(run_config.get("mm_audio_feature_dir"), model_args.get("mm_audio_feature_dir")),
         "mm_video_feature_dir": get_first(run_config.get("mm_video_feature_dir"), model_args.get("mm_video_feature_dir")),
         "historical_window": get_first(run_config.get("historical_window"), inferred["window_from_path"].replace("window_", "")),

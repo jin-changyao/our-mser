@@ -47,6 +47,7 @@ MM_VIDEO_FEATURE_DIR="${MM_VIDEO_FEATURE_DIR:-clip-vit-large-patch14-UTT}"
 MM_AUDIO_TOKENS="${MM_AUDIO_TOKENS:-4}"
 MM_VIDEO_TOKENS="${MM_VIDEO_TOKENS:-4}"
 MM_PROJECTOR_DROPOUT="${MM_PROJECTOR_DROPOUT:-0.05}"
+SKIP_MISSING_MM="${SKIP_MISSING_MM:-False}"
 TEXT_GUIDED_MM="${TEXT_GUIDED_MM:-False}"
 TEXT_GUIDE_SOURCE="${TEXT_GUIDE_SOURCE:-target_text}"
 TEXT_GUIDED_MODE="${TEXT_GUIDED_MODE:-film_gate}"
@@ -227,6 +228,7 @@ echo "MM audio feature dir: ${MM_AUDIO_FEATURE_DIR}"
 echo "MM video feature dir: ${MM_VIDEO_FEATURE_DIR}"
 echo "MM audio tokens: ${MM_AUDIO_TOKENS}"
 echo "MM video tokens: ${MM_VIDEO_TOKENS}"
+echo "Skip missing multimodal rows: ${SKIP_MISSING_MM}"
 echo "Text-guided MM: ${TEXT_GUIDED_MM}"
 echo "Text guide source: ${TEXT_GUIDE_SOURCE}"
 echo "Text-guided mode: ${TEXT_GUIDED_MODE}"
@@ -365,6 +367,7 @@ cat > "${OUTPUT_DIR}/run_config.json" <<EOF
   "mm_audio_tokens": "${MM_AUDIO_TOKENS}",
   "mm_video_tokens": "${MM_VIDEO_TOKENS}",
   "mm_projector_dropout": "${MM_PROJECTOR_DROPOUT}",
+  "skip_missing_mm": "${SKIP_MISSING_MM}",
   "text_guided_mm": "${TEXT_GUIDED_MM}",
   "text_guide_source": "${TEXT_GUIDE_SOURCE}",
   "text_guided_mode": "${TEXT_GUIDED_MODE}",
@@ -413,6 +416,7 @@ python main.py \
     --mm_audio_tokens "${MM_AUDIO_TOKENS}" \
     --mm_video_tokens "${MM_VIDEO_TOKENS}" \
     --mm_projector_dropout "${MM_PROJECTOR_DROPOUT}" \
+    --skip_missing_mm "${SKIP_MISSING_MM}" \
     --text_guided_mm "${TEXT_GUIDED_MM}" \
     --text_guide_source "${TEXT_GUIDE_SOURCE}" \
     --text_guided_mode "${TEXT_GUIDED_MODE}" \

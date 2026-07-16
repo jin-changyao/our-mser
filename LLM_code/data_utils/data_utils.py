@@ -94,6 +94,7 @@ def read_data(file_name, percent, random_seed, args=None):
     f = open(file_name, 'r', encoding='utf-8').readlines()
     data = [json.loads(d) for d in f]
     use_mm_prefix = bool(args is not None and getattr(args, "use_mm_prefix", False))
+    skip_missing_mm = bool(args is not None and getattr(args, "skip_missing_mm", False))
     split = infer_split_from_file_name(file_name)
     manifest_by_id = {}
     if use_mm_prefix:
@@ -110,13 +111,12 @@ def read_data(file_name, percent, random_seed, args=None):
     audio_feature_paths = []
     video_feature_paths = []
     missing_manifest = []
+    skipped_missing_mm = []
     for index, d in enumerate(data):
         if pd.isnull(d['target']) or pd.isna(d['target']):
             continue
-        inputs.append(d['input'])
-        targets.append(d['target'])
-        paths.append(d['path'])
-        target_utterances.append(d.get("target_utterance") or extract_target_utterance(d.get("input", "")))
+        audio_path = ""
+        video_path = ""
         if use_mm_prefix:
             utterance_id = d.get("utterance_id") or manifest_key_from_path(getattr(args, "dataset", ""), split, d["path"])
             manifest_row = manifest_by_id.get(utterance_id)
@@ -131,18 +131,33 @@ def read_data(file_name, percent, random_seed, args=None):
                     args.mm_video_feature_dir,
                     utterance_id,
                 )
-                if not audio_path or not video_path:
-                    missing_manifest.append(utterance_id)
-                audio_feature_paths.append(audio_path)
-                video_feature_paths.append(video_path)
             else:
-                audio_feature_paths.append(manifest_row.get(f"feature_{args.mm_audio_feature_dir}", ""))
-                video_feature_paths.append(manifest_row.get(f"feature_{args.mm_video_feature_dir}", ""))
+                audio_path = manifest_row.get(f"feature_{args.mm_audio_feature_dir}", "")
+                video_path = manifest_row.get(f"feature_{args.mm_video_feature_dir}", "")
+            if not audio_path or not video_path:
+                missing_manifest.append(utterance_id)
+                if skip_missing_mm:
+                    skipped_missing_mm.append(utterance_id)
+                    continue
+        inputs.append(d['input'])
+        targets.append(d['target'])
+        paths.append(d['path'])
+        target_utterances.append(d.get("target_utterance") or extract_target_utterance(d.get("input", "")))
+        if use_mm_prefix:
+            audio_feature_paths.append(audio_path)
+            video_feature_paths.append(video_path)
     if missing_manifest:
-        raise ValueError(
-            f"Missing {len(missing_manifest)} multimodal manifest rows for {file_name}. "
-            f"Examples: {missing_manifest[:10]}"
-        )
+        if skip_missing_mm:
+            print(
+                f"Skipped {len(skipped_missing_mm)} rows with missing multimodal features for {file_name}. "
+                f"Examples: {skipped_missing_mm[:10]}"
+            )
+        else:
+            raise ValueError(
+                f"Missing {len(missing_manifest)} multimodal manifest rows/features for {file_name}. "
+                f"Examples: {missing_manifest[:10]}. "
+                "Set SKIP_MISSING_MM=True to drop these rows for multimodal-prefix runs."
+            )
     dict_ = {'input': inputs, 'output': targets, 'path': paths, "target_utterance": target_utterances}
     if use_mm_prefix:
         dict_["audio_feature_path"] = audio_feature_paths
@@ -421,6 +436,7 @@ class ModelArgs:
     mm_audio_tokens: int = 4
     mm_video_tokens: int = 4
     mm_projector_dropout: float = 0.05
+    skip_missing_mm: bool = False
     mm_hidden_size: int = 3584
     text_guided_mm: bool = False
     text_guide_source: str = "target_text"
