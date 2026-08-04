@@ -7,21 +7,20 @@ import torch
 
 
 AUDIO_PROMPT = (
-    "Listen to the audio only. Describe only directly audible properties of the speaker's voice: "
-    "pitch, loudness, speaking pace, pauses, laughter, sighs, breathing, voice quality, and background noise. "
-    "Do not transcribe or quote the spoken words. Do not mention emotions, moods, attitudes, intentions, "
-    "or mental states. Do not explain what the cues indicate. Avoid words such as happy, sad, angry, "
-    "frustrated, annoyed, surprised, fearful, disgusted, calm, nervous, light-hearted, upset, and tense. "
-    "Write one or two concise English sentences with observable details only."
+    "Listen to the audio only. Describe directly audible properties of the speaker's voice, such as "
+    "pitch, loudness, speaking pace, pauses, laughter, sighs, breathing, and voice quality. "
+    "If laughter or noise is from the background, audience, or laugh track rather than the speaker, call it background sound. "
+    "Mention absent cues only if their absence is unusual or important; do not list things that are not present. "
+    "Do not transcribe words, infer emotion, or explain what the cues indicate. Avoid emotion and mood words. "
+    "Write one complete English sentence under 30 words."
 )
 
 VIDEO_PROMPT = (
-    "Watch the video only. Describe only directly visible actions and appearance: facial movements, "
-    "gaze direction, head movement, hand gestures, body posture, movement, and interaction with objects or people. "
-    "Ignore audio. Do not transcribe or quote the spoken words. Do not mention emotions, moods, attitudes, "
-    "intentions, relationships, or mental states. Do not explain what the cues indicate. Avoid words such as "
-    "happy, sad, angry, frustrated, annoyed, surprised, fearful, disgusted, calm, nervous, light-hearted, upset, and tense. "
-    "Write one or two concise English sentences with observable details only."
+    "Watch the video only. Describe directly visible actions and appearance, such as facial movement, gaze, "
+    "head movement, hand gestures, posture, body movement, and interaction with objects or people. "
+    "Ignore audio and do not transcribe words. Do not infer emotion, mood, attitude, intention, relationship, or mental state. "
+    "Do not explain what the cues indicate. Avoid emotion and mood words. "
+    "Write one complete English sentence under 35 words."
 )
 
 
@@ -198,7 +197,7 @@ def main():
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--caption_type", choices=["audio", "video", "both"], default="both")
     parser.add_argument("--max_new_tokens", type=int, default=96)
-    parser.add_argument("--prompt_version", default="omni_caption_v1")
+    parser.add_argument("--prompt_version", default="omni_caption_v2_observable")
     parser.add_argument("--attn_implementation", default="", help="Example: flash_attention_2")
     parser.add_argument("--model_class", choices=["thinker", "full"], default="thinker")
     parser.add_argument("--video_fps", type=float, default=1.0, help="Frames per second sampled from each video.")
@@ -276,6 +275,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
