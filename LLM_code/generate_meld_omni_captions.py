@@ -59,12 +59,18 @@ def select_rows(rows, split, limit):
     return rows
 
 
-def build_conversation(media_type, media_path, prompt):
+def build_conversation(media_type, media_path, prompt, video_fps=None, video_max_pixels=None):
+    media_item = {"type": media_type, media_type: media_path}
+    if media_type == "video":
+        if video_fps is not None:
+            media_item["fps"] = video_fps
+        if video_max_pixels is not None:
+            media_item["max_pixels"] = video_max_pixels
     return [
         {
             "role": "user",
             "content": [
-                {"type": media_type, media_type: media_path},
+                media_item,
                 {"type": "text", "text": prompt},
             ],
         },
@@ -83,11 +89,39 @@ def move_inputs_to_model(inputs, model):
     return inputs
 
 
-def generate_one(model, processor, process_mm_info, media_type, media_path, prompt, max_new_tokens, return_audio_arg):
+def clean_caption(text):
+    text = str(text).strip()
+    for marker in ["\nHuman:", "\nUser:", "\nAssistant:", "\nhuman:", "\nuser:", "\nassistant:"]:
+        if marker in text:
+            text = text.split(marker, 1)[0].strip()
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if lines:
+        text = lines[0]
+    return text.strip().strip("`")
+
+
+def generate_one(
+    model,
+    processor,
+    process_mm_info,
+    media_type,
+    media_path,
+    prompt,
+    max_new_tokens,
+    return_audio_arg,
+    video_fps=None,
+    video_max_pixels=None,
+):
     if not Path(media_path).is_file():
         raise FileNotFoundError(media_path)
     use_audio_in_video = False
-    conversation = build_conversation(media_type, str(media_path), prompt)
+    conversation = build_conversation(
+        media_type,
+        str(media_path),
+        prompt,
+        video_fps=video_fps,
+        video_max_pixels=video_max_pixels,
+    )
     text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
     audios, images, videos = process_mm_info(conversation, use_audio_in_video=use_audio_in_video)
     inputs = processor(
@@ -114,7 +148,7 @@ def generate_one(model, processor, process_mm_info, media_type, media_path, prom
     input_length = inputs["input_ids"].shape[-1] if "input_ids" in inputs else 0
     generated_ids = output_ids[:, input_length:] if input_length else output_ids
     decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-    caption = decoded[0].strip()
+    caption = clean_caption(decoded[0])
     del inputs, output_ids, generated_ids
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -163,6 +197,8 @@ def main():
     parser.add_argument("--prompt_version", default="omni_caption_v1")
     parser.add_argument("--attn_implementation", default="", help="Example: flash_attention_2")
     parser.add_argument("--model_class", choices=["thinker", "full"], default="thinker")
+    parser.add_argument("--video_fps", type=float, default=1.0, help="Frames per second sampled from each video.")
+    parser.add_argument("--video_max_pixels", type=int, default=200704, help="Maximum pixels per sampled video frame.")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -221,6 +257,8 @@ def main():
                     VIDEO_PROMPT,
                     args.max_new_tokens,
                     return_audio_arg,
+                    video_fps=args.video_fps,
+                    video_max_pixels=args.video_max_pixels,
                 )
         except Exception as exc:
             record["status"] = "error"
@@ -234,5 +272,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
