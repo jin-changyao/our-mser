@@ -6,11 +6,6 @@ from pathlib import Path
 import torch
 
 
-SYSTEM_PROMPT = (
-    "You are an expert multimodal annotator for emotion recognition in conversation. "
-    "Describe observable audio or visual cues. Do not output an emotion label."
-)
-
 AUDIO_PROMPT = (
     "Listen to the audio only. Describe speech and acoustic cues useful for emotion recognition, "
     "such as tone, pitch, loudness, pace, pauses, laughter, sighs, and vocal affect. "
@@ -67,10 +62,6 @@ def select_rows(rows, split, limit):
 def build_conversation(media_type, media_path, prompt):
     return [
         {
-            "role": "system",
-            "content": [{"type": "text", "text": SYSTEM_PROMPT}],
-        },
-        {
             "role": "user",
             "content": [
                 {"type": media_type, media_type: media_path},
@@ -118,8 +109,16 @@ def generate_one(model, processor, process_mm_info, media_type, media_path, prom
         generate_kwargs["return_audio"] = False
     with torch.inference_mode():
         output_ids = model.generate(**inputs, **generate_kwargs)
-    decoded = processor.batch_decode(output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-    return decoded[0].strip()
+    if isinstance(output_ids, tuple):
+        output_ids = output_ids[0]
+    input_length = inputs["input_ids"].shape[-1] if "input_ids" in inputs else 0
+    generated_ids = output_ids[:, input_length:] if input_length else output_ids
+    decoded = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+    caption = decoded[0].strip()
+    del inputs, output_ids, generated_ids
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return caption
 
 
 def load_omni(model_path, attn_implementation, model_class):
@@ -185,17 +184,21 @@ def main():
         if old and not args.overwrite:
             has_audio = (not needs_audio) or bool(old.get("audio_caption"))
             has_video = (not needs_video) or bool(old.get("video_caption"))
-            if old.get("status") == "ok" and has_audio and has_video:
+            if has_audio and has_video:
                 skipped += 1
                 continue
 
-        record = {
-            "name": row["name"],
-            "split": row["split"],
-            "prompt_version": args.prompt_version,
-            "model_path": args.model_path,
-            "status": "ok",
-        }
+        record = dict(old) if old and not args.overwrite else {}
+        record.update(
+            {
+                "name": row["name"],
+                "split": row["split"],
+                "prompt_version": args.prompt_version,
+                "model_path": args.model_path,
+                "status": "ok",
+            }
+        )
+        record.pop("error", None)
         try:
             if needs_audio:
                 record["audio_caption"] = generate_one(
@@ -231,4 +234,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
