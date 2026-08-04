@@ -7,17 +7,21 @@ import torch
 
 
 AUDIO_PROMPT = (
-    "Listen to the audio only. Describe speech and acoustic cues useful for emotion recognition, "
-    "such as tone, pitch, loudness, pace, pauses, laughter, sighs, and vocal affect. "
-    "Do not transcribe or quote the spoken words. Do not infer or output an emotion label. "
-    "Write one concise English sentence."
+    "Listen to the audio only. Describe only directly audible properties of the speaker's voice: "
+    "pitch, loudness, speaking pace, pauses, laughter, sighs, breathing, voice quality, and background noise. "
+    "Do not transcribe or quote the spoken words. Do not mention emotions, moods, attitudes, intentions, "
+    "or mental states. Do not explain what the cues indicate. Avoid words such as happy, sad, angry, "
+    "frustrated, annoyed, surprised, fearful, disgusted, calm, nervous, light-hearted, upset, and tense. "
+    "Write one or two concise English sentences with observable details only."
 )
 
 VIDEO_PROMPT = (
-    "Watch the video only. Describe visible cues useful for emotion recognition, such as facial "
-    "expression, gaze, gestures, posture, movement, and interaction cues. Ignore audio. "
-    "Do not transcribe or quote the spoken words. Do not infer or output an emotion label. "
-    "Write one concise English sentence."
+    "Watch the video only. Describe only directly visible actions and appearance: facial movements, "
+    "gaze direction, head movement, hand gestures, body posture, movement, and interaction with objects or people. "
+    "Ignore audio. Do not transcribe or quote the spoken words. Do not mention emotions, moods, attitudes, "
+    "intentions, relationships, or mental states. Do not explain what the cues indicate. Avoid words such as "
+    "happy, sad, angry, frustrated, annoyed, surprised, fearful, disgusted, calm, nervous, light-hearted, upset, and tense. "
+    "Write one or two concise English sentences with observable details only."
 )
 
 
@@ -272,6 +276,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
