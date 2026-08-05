@@ -44,6 +44,7 @@ OMNI_CAPTION_DEVICE="${OMNI_CAPTION_DEVICE:-0,1,2}"
 TRAIN_DEVICE="${TRAIN_DEVICE:-0}"
 AUDIO_WORKERS="${AUDIO_WORKERS:-4}"
 SKIP_CAPTION_GENERATION="${SKIP_CAPTION_GENERATION:-False}"
+SKIP_MISSING_CAPTIONS="${SKIP_MISSING_CAPTIONS:-True}"
 
 case "${MODEL_NAME}" in
     qwen2.5|qwen25|Qwen2.5|Qwen25)
@@ -120,7 +121,8 @@ python data_process_meld_omni_caption.py \
     --historical_window "${HISTORICAL_WINDOW}" \
     --prompt_style "${PROMPT_STYLE}" \
     --use_audio_caption "${USE_AUDIO_CAPTION}" \
-    --use_video_caption "${USE_VIDEO_CAPTION}"
+    --use_video_caption "${USE_VIDEO_CAPTION}" \
+    --skip_missing "${SKIP_MISSING_CAPTIONS}"
 
 OUTPUT_DIR="../experiments/${MODEL_LABEL}/lora/meld/window_${HISTORICAL_WINDOW}/LR_${LORA_LR}_BS_${BATCH_SIZE}_omni_caption_av_${SEED}_run_${RUN_ID}"
 mkdir -p "${OUTPUT_DIR}"
@@ -173,3 +175,4 @@ CUDA_VISIBLE_DEVICES="${TRAIN_DEVICE}" python main.py \
     --use_mm_prefix False
 
 echo "Finished MELD Omni caption experiment: ${OUTPUT_DIR}"
+
