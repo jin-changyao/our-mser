@@ -37,6 +37,8 @@ LORA_MODULE_NAME="${LORA_MODULE_NAME:-q_proj,k_proj,v_proj,query_key_value}"
 MAX_LENGTH="${MAX_LENGTH:-1500}"
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-10}"
 TRAIN_DEVICES="${TRAIN_DEVICES:-0 1 2}"
+TRAIN_PORTS="${TRAIN_PORTS:-29600 29601 29602}"
+MASTER_ADDR="${MASTER_ADDR:-127.0.0.1}"
 SKIP_TRAINING="${SKIP_TRAINING:-False}"
 RUN_ANALYSIS="${RUN_ANALYSIS:-True}"
 
@@ -56,8 +58,13 @@ case "${MODEL_NAME}" in
 esac
 
 read -r -a DEVICE_ARRAY <<< "${TRAIN_DEVICES}"
+read -r -a PORT_ARRAY <<< "${TRAIN_PORTS}"
 if [ "${#DEVICE_ARRAY[@]}" -lt 3 ]; then
     echo "TRAIN_DEVICES must contain at least three devices, for example: TRAIN_DEVICES=\"0 1 2\""
+    exit 1
+fi
+if [ "${#PORT_ARRAY[@]}" -lt 3 ]; then
+    echo "TRAIN_PORTS must contain at least three ports, for example: TRAIN_PORTS=\"29600 29601 29602\""
     exit 1
 fi
 
@@ -80,6 +87,7 @@ echo "Raw captions: ${RAW_CAPTION_PATH}"
 echo "Clean captions: ${CLEAN_CAPTION_PATH}"
 echo "Cue-list captions: ${CUELIST_CAPTION_PATH}"
 echo "Train devices: ${TRAIN_DEVICES}"
+echo "Train ports: ${TRAIN_PORTS}"
 echo "Train model: ${MODEL_PATH}"
 echo "******************************************************************************************"
 
@@ -159,11 +167,12 @@ trap cleanup INT TERM
 
 launch_train() {
     local device="$1"
-    local run_name="$2"
-    local data_dir="$3"
-    local caption_path="$4"
-    local caption_format="$5"
-    local caption_prompt_mode="$6"
+    local port="$2"
+    local run_name="$3"
+    local data_dir="$4"
+    local caption_path="$5"
+    local caption_format="$6"
+    local caption_prompt_mode="$7"
     local output_dir="${OUTPUT_BASE}/LR_${LORA_LR}_BS_${BATCH_SIZE}_${run_name}_${SEED}_run_${RUN_ID}"
     local log_path="${LOG_DIR}/${run_name}.log"
 
@@ -187,11 +196,18 @@ launch_train() {
   "prompt_style": "${PROMPT_STYLE}",
   "seed": "${SEED}",
   "train_device": "${device}",
+  "master_addr": "${MASTER_ADDR}",
+  "master_port": "${port}",
   "output_dir": "${output_dir}"
 }
 EOF
 
-    echo "Launching ${run_name} on GPU ${device}"
+    echo "Launching ${run_name} on GPU ${device}, MASTER_PORT=${port}"
+    MASTER_ADDR="${MASTER_ADDR}" \
+    MASTER_PORT="${port}" \
+    RANK=0 \
+    LOCAL_RANK=0 \
+    WORLD_SIZE=1 \
     CUDA_VISIBLE_DEVICES="${device}" python main.py \
         --dataset meld \
         --model_name_or_path "${MODEL_PATH}" \
@@ -224,9 +240,9 @@ EOF
     echo "${run_name}: pid=${pid} log=${log_path} output=${output_dir}"
 }
 
-launch_train "${DEVICE_ARRAY[0]}" "omni_clean_separate" "${CLEAN_SEPARATE_DIR}" "${CLEAN_CAPTION_PATH}" "clean_natural" "separate_fields"
-launch_train "${DEVICE_ARRAY[1]}" "omni_cuelist_separate" "${CUELIST_SEPARATE_DIR}" "${CUELIST_CAPTION_PATH}" "cue_list" "separate_fields"
-launch_train "${DEVICE_ARRAY[2]}" "omni_cuelist_unified" "${CUELIST_UNIFIED_DIR}" "${CUELIST_CAPTION_PATH}" "cue_list" "unified_cues"
+launch_train "${DEVICE_ARRAY[0]}" "${PORT_ARRAY[0]}" "omni_clean_separate" "${CLEAN_SEPARATE_DIR}" "${CLEAN_CAPTION_PATH}" "clean_natural" "separate_fields"
+launch_train "${DEVICE_ARRAY[1]}" "${PORT_ARRAY[1]}" "omni_cuelist_separate" "${CUELIST_SEPARATE_DIR}" "${CUELIST_CAPTION_PATH}" "cue_list" "separate_fields"
+launch_train "${DEVICE_ARRAY[2]}" "${PORT_ARRAY[2]}" "omni_cuelist_unified" "${CUELIST_UNIFIED_DIR}" "${CUELIST_CAPTION_PATH}" "cue_list" "unified_cues"
 
 status=0
 for idx in "${!pids[@]}"; do
