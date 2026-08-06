@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -63,23 +63,47 @@ def group_dialogs(rows):
     return dialogs
 
 
-def build_qwen_chat_prompt(context_lines, target_utterance, audio_caption, video_caption):
-    system_msg = (
-        "You are an expert in emotion recognition in conversation. "
-        "Classify the emotion of the target utterance only. "
-        "Use the dialogue context, the target speaker, and the provided audio and visual descriptions. "
-        "Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n"
-        f"{LABEL_GUIDANCE}"
-    )
+def build_caption_parts(audio_caption, video_caption, caption_prompt_mode):
+    if caption_prompt_mode == "unified_cues":
+        cue_lines = []
+        if audio_caption:
+            cue_lines.append(audio_caption.strip())
+        if video_caption:
+            cue_lines.append(video_caption.strip())
+        return ["Target observable multimodal cues:\n" + "\n".join(cue_lines)] if cue_lines else []
+
+    parts = []
+    if audio_caption:
+        parts.append("Target audio description:\n" + audio_caption.strip())
+    if video_caption:
+        parts.append("Target video description:\n" + video_caption.strip())
+    return parts
+
+
+def build_qwen_chat_prompt(context_lines, target_utterance, audio_caption, video_caption, caption_prompt_mode):
+    if caption_prompt_mode == "unified_cues":
+        system_msg = (
+            "You are an expert in emotion recognition in conversation. "
+            "Classify the emotion of the target utterance only. "
+            "Use the dialogue context, the target speaker, and the provided observable audio and visual cues as auxiliary evidence. "
+            "Do not treat multimodal cues as emotion labels. "
+            "Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n"
+            f"{LABEL_GUIDANCE}"
+        )
+    else:
+        system_msg = (
+            "You are an expert in emotion recognition in conversation. "
+            "Classify the emotion of the target utterance only. "
+            "Use the dialogue context, the target speaker, and the provided audio and visual descriptions. "
+            "Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n"
+            f"{LABEL_GUIDANCE}"
+        )
     user_parts = [
         f"Available emotion labels:\n{LABEL_TEXT}",
         "Dialogue context:\n" + "\n".join(context_lines),
         f"Target utterance:\n{target_utterance}",
     ]
-    if audio_caption:
-        user_parts.append("Target audio description:\n" + audio_caption.strip())
-    if video_caption:
-        user_parts.append("Target video description:\n" + video_caption.strip())
+    user_parts.extend(build_caption_parts(audio_caption, video_caption, caption_prompt_mode))
     user_parts.append(
         "Question:\n"
         "What is the emotion label of the target utterance? "
@@ -91,7 +115,7 @@ def build_qwen_chat_prompt(context_lines, target_utterance, audio_caption, video
     ]
 
 
-def build_legacy_prompt(context_lines, target_utterance, audio_caption, video_caption):
+def build_legacy_prompt(context_lines, target_utterance, audio_caption, video_caption, caption_prompt_mode):
     prompt = (
         "Now you are expert of sentiment and emotional analysis."
         "The following conversation noted between '### ###' involves several speakers. "
@@ -99,10 +123,8 @@ def build_legacy_prompt(context_lines, target_utterance, audio_caption, video_ca
         + " ".join(context_lines)
         + " ### "
     )
-    if audio_caption:
-        prompt += f" Target audio description: {audio_caption.strip()}"
-    if video_caption:
-        prompt += f" Target video description: {video_caption.strip()}"
+    for caption_part in build_caption_parts(audio_caption, video_caption, caption_prompt_mode):
+        prompt += f" {caption_part.replace(chr(10), ' ')}"
     prompt += (
         f" Please select the emotional label of <{target_utterance}> from <{LABEL_TEXT}> "
         "based on the dialogue context and multimodal descriptions. Respond with just one label:"
@@ -110,7 +132,16 @@ def build_legacy_prompt(context_lines, target_utterance, audio_caption, video_ca
     return prompt
 
 
-def build_examples(manifest_rows, captions, window, prompt_style, use_audio_caption, use_video_caption, skip_missing):
+def build_examples(
+    manifest_rows,
+    captions,
+    window,
+    prompt_style,
+    caption_prompt_mode,
+    use_audio_caption,
+    use_video_caption,
+    skip_missing,
+):
     dialogs = group_dialogs(manifest_rows)
     examples = []
     missing_caption = []
@@ -133,9 +164,21 @@ def build_examples(manifest_rows, captions, window, prompt_style, use_audio_capt
             ]
             target_utterance = context_lines[-1]
             if prompt_style == "qwen_chat":
-                prompt = build_qwen_chat_prompt(context_lines, target_utterance, audio_caption, video_caption)
+                prompt = build_qwen_chat_prompt(
+                    context_lines,
+                    target_utterance,
+                    audio_caption,
+                    video_caption,
+                    caption_prompt_mode,
+                )
             else:
-                prompt = build_legacy_prompt(context_lines, target_utterance, audio_caption, video_caption)
+                prompt = build_legacy_prompt(
+                    context_lines,
+                    target_utterance,
+                    audio_caption,
+                    video_caption,
+                    caption_prompt_mode,
+                )
             examples.append(
                 {
                     "split": normalize_split(row["split"]),
@@ -165,6 +208,7 @@ def main():
     parser.add_argument("--out_dir", default="../PROCESSED_DATASET/meld/omni_caption_prompt/window_12_qwen_chat_av")
     parser.add_argument("--historical_window", type=int, default=12)
     parser.add_argument("--prompt_style", choices=["legacy", "qwen_chat"], default="qwen_chat")
+    parser.add_argument("--caption_prompt_mode", choices=["separate_fields", "unified_cues"], default="separate_fields")
     parser.add_argument("--use_audio_caption", default="True")
     parser.add_argument("--use_video_caption", default="True")
     parser.add_argument("--skip_missing", default="False")
@@ -177,6 +221,7 @@ def main():
         captions=captions,
         window=args.historical_window,
         prompt_style=args.prompt_style,
+        caption_prompt_mode=args.caption_prompt_mode,
         use_audio_caption=str_to_bool(args.use_audio_caption),
         use_video_caption=str_to_bool(args.use_video_caption),
         skip_missing=str_to_bool(args.skip_missing),
@@ -202,6 +247,7 @@ def main():
         "use_video_caption": str_to_bool(args.use_video_caption),
         "historical_window": args.historical_window,
         "prompt_style": args.prompt_style,
+        "caption_prompt_mode": args.caption_prompt_mode,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "caption_process_report.json").write_text(
@@ -214,7 +260,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
