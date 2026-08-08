@@ -23,6 +23,20 @@ VIDEO_PROMPT = (
     "Write one complete English sentence under 35 words."
 )
 
+GRPO_STYLE_AUDIO_PROMPT = (
+    "Listen to the audio only. Be concise and describe the speaker's audible tone and speech delivery, "
+    "including pitch, loudness, pace, pauses, laughter, sighs, breathing, and voice quality when present. "
+    "If laughter or noise is from the background, audience, or laugh track rather than the speaker, call it background sound. "
+    "Do not transcribe words, infer emotion, or use emotion labels. Write one complete English sentence under 30 words."
+)
+
+GRPO_STYLE_VIDEO_PROMPT = (
+    "Watch the video only. Describe the actions of the person currently speaking in detail, and briefly describe "
+    "the actions, gaze, posture, or interaction of others when visible. Ignore audio and do not transcribe words. "
+    "Do not infer emotion, mood, attitude, intention, relationship, or mental state. "
+    "Write one complete English sentence under 50 words."
+)
+
 
 def read_jsonl(path):
     rows = []
@@ -60,6 +74,31 @@ def select_rows(rows, split, limit):
     if limit is not None:
         rows = rows[:limit]
     return rows
+
+
+def load_names(path):
+    if not path:
+        return None
+    names = set()
+    with Path(path).open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+                name = row.get("name") or row.get("utterance_id")
+            except json.JSONDecodeError:
+                name = line
+            if name:
+                names.add(str(name))
+    return names
+
+
+def prompts_for_version(prompt_version):
+    if prompt_version == "grpo_style_context_v1":
+        return GRPO_STYLE_AUDIO_PROMPT, GRPO_STYLE_VIDEO_PROMPT
+    return AUDIO_PROMPT, VIDEO_PROMPT
 
 
 def build_conversation(media_type, media_path, prompt, video_fps=None, video_max_pixels=None):
@@ -202,12 +241,17 @@ def main():
     parser.add_argument("--model_class", choices=["thinker", "full"], default="thinker")
     parser.add_argument("--video_fps", type=float, default=1.0, help="Frames per second sampled from each video.")
     parser.add_argument("--video_max_pixels", type=int, default=200704, help="Maximum pixels per sampled video frame.")
+    parser.add_argument("--names_file", default="", help="Optional text/jsonl file listing manifest names to generate.")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
     out_path = Path(args.out)
     existing = load_existing(out_path)
     rows = select_rows(read_jsonl(args.manifest), args.split, args.limit)
+    selected_names = load_names(args.names_file)
+    if selected_names is not None:
+        rows = [row for row in rows if row.get("name") in selected_names]
+    audio_prompt, video_prompt = prompts_for_version(args.prompt_version)
     model, processor, process_mm_info, return_audio_arg = load_omni(
         args.model_path,
         args.attn_implementation or None,
@@ -246,7 +290,7 @@ def main():
                     process_mm_info,
                     "audio",
                     row["audio_path"],
-                    AUDIO_PROMPT,
+                    audio_prompt,
                     args.max_new_tokens,
                     return_audio_arg,
                 )
@@ -257,7 +301,7 @@ def main():
                     process_mm_info,
                     "video",
                     row["video_path"],
-                    VIDEO_PROMPT,
+                    video_prompt,
                     args.max_new_tokens,
                     return_audio_arg,
                     video_fps=args.video_fps,
