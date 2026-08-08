@@ -76,6 +76,13 @@ def build_caption_parts(audio_caption, video_caption, caption_prompt_mode):
         if video_caption:
             parts.append("Target video description:\n" + video_caption.strip())
         return parts
+    if caption_prompt_mode == "context_audio_plus_target_av":
+        parts = []
+        if audio_caption:
+            parts.append("Target audio description:\n" + audio_caption.strip())
+        if video_caption:
+            parts.append("Target video description:\n" + video_caption.strip())
+        return parts
 
     if caption_prompt_mode == "unified_cues":
         cue_lines = []
@@ -101,6 +108,17 @@ def build_qwen_chat_prompt(context_lines, target_utterance, audio_caption, video
             "Use the dialogue text as the primary semantic evidence. "
             "Use audio descriptions attached to utterances in the dialogue window as auxiliary speech-delivery evidence, "
             "and use the target video description as auxiliary visible-action evidence. "
+            "Do not treat multimodal descriptions as emotion labels. "
+            "Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n"
+            f"{LABEL_GUIDANCE}"
+        )
+    elif caption_prompt_mode == "context_audio_plus_target_av":
+        system_msg = (
+            "You are an expert in emotion recognition in conversation. "
+            "Classify the emotion of the target utterance only. "
+            "Use the dialogue text as the primary semantic evidence. "
+            "Use audio descriptions attached to utterances in the dialogue window as auxiliary speech-delivery evidence. "
+            "Use the target audio and video descriptions as auxiliary evidence about the target utterance. "
             "Do not treat multimodal descriptions as emotion labels. "
             "Do not classify the whole dialogue. Choose exactly one label from the given label set and output no other words.\n\n"
             f"{LABEL_GUIDANCE}"
@@ -182,7 +200,7 @@ def build_examples(
             audio_caption = cap.get("audio_caption", "").strip() if use_audio_caption else ""
             video_caption = cap.get("video_caption", "").strip() if use_video_caption else ""
 
-            if caption_prompt_mode == "context_audio_target_video":
+            if caption_prompt_mode in {"context_audio_target_video", "context_audio_plus_target_av"}:
                 missing_for_example = []
                 context_lines = []
                 for ctx_row in context_rows:
@@ -197,7 +215,8 @@ def build_examples(
                     if skip_missing:
                         continue
                     raise ValueError(f"Missing required caption for {name}: {sorted(set(missing_for_example))}")
-                audio_caption = ""
+                if caption_prompt_mode == "context_audio_target_video":
+                    audio_caption = ""
             else:
                 if (use_audio_caption and not audio_caption) or (use_video_caption and not video_caption):
                     missing_caption.append(name)
@@ -253,7 +272,7 @@ def main():
     parser.add_argument("--prompt_style", choices=["legacy", "qwen_chat"], default="qwen_chat")
     parser.add_argument(
         "--caption_prompt_mode",
-        choices=["separate_fields", "unified_cues", "context_audio_target_video"],
+        choices=["separate_fields", "unified_cues", "context_audio_target_video", "context_audio_plus_target_av"],
         default="separate_fields",
     )
     parser.add_argument("--use_audio_caption", default="True")
