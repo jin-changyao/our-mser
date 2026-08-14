@@ -15,8 +15,10 @@ PY
 这个复现代码相对于现有环境主要新增：
 
 ```bash
-pip install trl lightning bitsandbytes sentence-transformers faiss-cpu
+python -m pip install -r requirements_server_extra.txt
 ```
+
+这里不能只安装最新版本的 `trl`，因为服务器原环境中的 `peft`、`transformers` 和 `datasets` 可能太旧或彼此不兼容。当前清单固定为 `transformers==4.46.3`、`trl==0.12.2`、`peft==0.12.0` 等版本。
 
 `flash-attn` 需要与服务器的 PyTorch、CUDA 和编译器匹配，不能盲目安装。它已单独放在 `requirements_server_optional_flashattn.txt`。代码默认请求 `flash_attention_2`；如果服务器安装失败，可以把训练代码切换到 PyTorch `sdpa`，功能不变但速度可能下降。必需依赖清单见 `requirements_server_extra.txt`。
 

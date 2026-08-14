@@ -1,6 +1,11 @@
 # Extra packages required by PRC-Emo beyond the existing our-mser environment.
-# Install inside the existing server environment after checking its torch/CUDA versions.
-trl
+# These pins keep TRL compatible with the Transformers 4.x API used by the
+# checked-in training code. In particular, PEFT 0.12 exports PeftMixedModel.
+transformers==4.46.3
+accelerate==0.34.2
+datasets==2.21.0
+peft==0.12.0
+trl==0.12.2
 lightning
 bitsandbytes
 sentence-transformers
