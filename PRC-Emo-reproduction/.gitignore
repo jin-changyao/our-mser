@@ -1,0 +1,11 @@
+# Large offline artifacts are uploaded to the server separately.
+data/Emotion_Retrieval_Library_3.json
+retrieval_repository_source/Emotion_Retrieval_Library.json
+models/all-MiniLM-L6-v2/*.safetensors
+
+# Runtime outputs.
+logs/
+runs/
+data/*.jsonl
+data/*_ImplicitEmotion_V3_Qwen2.5-7B-Instruct.json
+data/*_spdescV6_Qwen2.5-7B-Instruct.json

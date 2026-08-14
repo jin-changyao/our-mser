@@ -1,0 +1,7 @@
+# Extra packages required by PRC-Emo beyond the existing our-mser environment.
+# Install inside the existing server environment after checking its torch/CUDA versions.
+trl
+lightning
+bitsandbytes
+sentence-transformers
+faiss-cpu

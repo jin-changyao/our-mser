@@ -1,0 +1,3 @@
+# Optional acceleration. Install only after checking the server's PyTorch/CUDA
+# compatibility. Otherwise use PRC_EMO_ATTN_IMPL=sdpa.
+flash-attn
