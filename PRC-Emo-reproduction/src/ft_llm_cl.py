@@ -26,6 +26,19 @@ from reformat_data_ft_llm_combine import process
 from transformers import TrainerCallback
 from peft import PeftModel, PeftConfig
 
+
+def ensure_chat_format(model, tokenizer):
+    """Keep a model-native chat template when one is already available.
+
+    Qwen2.5 tokenizers ship with their own chat template. Newer TRL versions
+    reject setup_chat_format() in that case because it would overwrite the
+    existing template. Models without a native template still receive the
+    same TRL fallback used by the original code path.
+    """
+    if getattr(tokenizer, "chat_template", None):
+        return model, tokenizer
+    return setup_chat_format(model, tokenizer)
+
 #4090用不了这两个，需要禁用
 os.environ["NCCL_P2P_DISABLE"] = "1"
 os.environ["NCCL_IB_DISABLE"] = "1"
@@ -399,7 +412,7 @@ if __name__=='__main__':
             device_map="auto",
             torch_dtype=tensor_data_type
         )
-        model, tokenizer = setup_chat_format(model, tokenizer)
+        model, tokenizer = ensure_chat_format(model, tokenizer)
         
     # 设置课程学习更新频率
     if args.curriculum and args.curriculum_update_epochs is None:
@@ -500,7 +513,7 @@ if __name__=='__main__':
                 # 应用聊天格式
                 tokenizer = AutoTokenizer.from_pretrained(model_id)
                 tokenizer.padding_side = 'left'
-                model, tokenizer = setup_chat_format(model, tokenizer)
+                model, tokenizer = ensure_chat_format(model, tokenizer)
                 
                 # 保存原始模型的分词器
                 tokenizer.save_pretrained(phase_output_dir)
@@ -572,7 +585,7 @@ if __name__=='__main__':
                 base_model.gradient_checkpointing_enable()
                 base_model.enable_input_require_grads()
                 # 应用聊天格式
-                base_model, tokenizer = setup_chat_format(base_model, tokenizer)
+                base_model, tokenizer = ensure_chat_format(base_model, tokenizer)
                 for name, param in base_model.named_parameters():
                     param.requires_grad = False
                 # 加载上阶段 LoRA adapter
@@ -683,7 +696,7 @@ if __name__=='__main__':
             )
             base_model.gradient_checkpointing_enable()
             base_model.enable_input_require_grads()
-            base_model, tokenizer = setup_chat_format(base_model, tokenizer)
+            base_model, tokenizer = ensure_chat_format(base_model, tokenizer)
             for name, param in base_model.named_parameters():
                 param.requires_grad = False
             model = PeftModel.from_pretrained(
@@ -790,7 +803,7 @@ if __name__=='__main__':
         
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.padding_side = 'left'
-        model, tokenizer = setup_chat_format(model, tokenizer)
+        model, tokenizer = ensure_chat_format(model, tokenizer)
         
         # 训练参数
         training_args = TrainingArguments(
