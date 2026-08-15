@@ -28,6 +28,12 @@ python -m pip install -r requirements_server_extra.txt
 PRC_EMO_ATTN_IMPL=sdpa bash scripts/run_reproduction_3gpu.sh
 ```
 
+The launcher now skips emotion/speaker feature generation and retrieval-prompt preprocessing when all expected output files already exist. To force regeneration, use:
+
+```bash
+PRC_EMO_FORCE_REGEN=1 PRC_EMO_ATTN_IMPL=sdpa bash scripts/run_reproduction_3gpu.sh
+```
+
 在服务器上执行：
 
 ```bash

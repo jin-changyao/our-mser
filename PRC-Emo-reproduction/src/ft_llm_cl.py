@@ -166,7 +166,7 @@ class SimplifiedTrainer(SFTTrainer):
             gold_label = ""
             if messages:
                 try:
-                    prompt = self.tokenizer.apply_chat_template(
+                    prompt = self.processing_class.apply_chat_template(
                         messages[:-1], tokenize=False, add_generation_prompt=True
                     )
                 except Exception:
@@ -189,7 +189,7 @@ class SimplifiedTrainer(SFTTrainer):
         dataset2 = dataset.map(split_label)
         dataset = self._prepare_dataset(
                 dataset=dataset,
-                tokenizer=self.tokenizer,
+                processing_class=self.processing_class,
                 packing=False,
                 dataset_text_field=None,
                 max_seq_length=self.data_process_args.max_seq_length,
@@ -248,8 +248,8 @@ class SimplifiedTrainer(SFTTrainer):
                 inputs = self._prepare_inputs(inputs)
                 gen_kwargs = {'max_new_tokens': 10, 
                               'do_sample': False, 
-                              'eos_token_id': self.tokenizer.eos_token_id, 
-                              'pad_token_id': self.tokenizer.pad_token_id,
+                              'eos_token_id': self.processing_class.eos_token_id,
+                              'pad_token_id': self.processing_class.pad_token_id,
                               "temperature": 0.1,
                               }
                 generated_tokens = model.generate(
@@ -258,8 +258,8 @@ class SimplifiedTrainer(SFTTrainer):
                     **gen_kwargs,
                 )
                 labels = inputs.pop("labels")
-                str_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
-                raw_decoded = [e for e in self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=False)]
+                str_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
+                raw_decoded = [e for e in self.processing_class.batch_decode(generated_tokens, skip_special_tokens=False)]
                 str_decoded = [post_process(e) for e in raw_decoded]
                 all_preds += str_decoded
                 all_labels += str_labels
@@ -546,7 +546,7 @@ if __name__=='__main__':
                         task_type="CAUSAL_LM", 
                     ),
                     max_seq_length=args.max_seq_len,
-                    tokenizer=tokenizer,
+                    processing_class=tokenizer,
                     packing=True,
                     dataset_kwargs={
                         "add_special_tokens": False,
@@ -627,7 +627,7 @@ if __name__=='__main__':
                     # **关键：不传入peft_config，因为模型已经是PeftModel**
                     peft_config=None,  
                     max_seq_length=args.max_seq_len,
-                    tokenizer=tokenizer,
+                    processing_class=tokenizer,
                     packing=True,
                     dataset_kwargs={
                         "add_special_tokens": False,
@@ -753,7 +753,7 @@ if __name__=='__main__':
                 peft_config=None,
                 neftune_noise_alpha=5,
                 max_seq_length=args.max_seq_len,
-                tokenizer=tokenizer,
+                processing_class=tokenizer,
                 packing=True,
                 dataset_kwargs={
                     "add_special_tokens": False,
@@ -852,7 +852,7 @@ if __name__=='__main__':
                 task_type="CAUSAL_LM", 
             ),
             max_seq_length=args.max_seq_len,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
             packing=True,
             dataset_kwargs={
                 "add_special_tokens": False,

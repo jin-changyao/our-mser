@@ -11,6 +11,8 @@ GEN_GPU="${GEN_GPU:-0}"
 WINDOW="${WINDOW:-5}"
 PROMPT_TYPE="${PROMPT_TYPE:-ImplicitEmotion_V3}"
 EXTRACT_LLM_ID="${EXTRACT_LLM_ID:-Qwen2.5-7B-Instruct}"
+EMOTION_FEATURE_TYPE="${EMOTION_FEATURE_TYPE:-ImplicitEmotion_V3}"
+SPEAKER_FEATURE_TYPE="${SPEAKER_FEATURE_TYPE:-spdescV6}"
 EPOCHS="${EPOCHS:-4}"
 LR="${LR:-3e-4}"
 LORA_R="${LORA_R:-32}"
@@ -35,8 +37,45 @@ run_logged() {
     return "$code"
 }
 
+all_files_ready() {
+    local path
+    for path in "$@"; do
+        if [[ ! -s "$path" ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
+feature_files() {
+    local dataset="$1"
+    local model_basename="${MODEL_PATH##*/}"
+    printf '%s\n' \
+        "$PROJECT_ROOT/data/${dataset}.train_${EMOTION_FEATURE_TYPE}_${model_basename}.json" \
+        "$PROJECT_ROOT/data/${dataset}.valid_${EMOTION_FEATURE_TYPE}_${model_basename}.json" \
+        "$PROJECT_ROOT/data/${dataset}.test_${EMOTION_FEATURE_TYPE}_${model_basename}.json" \
+        "$PROJECT_ROOT/data/${dataset}.train_${SPEAKER_FEATURE_TYPE}_${model_basename}.json" \
+        "$PROJECT_ROOT/data/${dataset}.valid_${SPEAKER_FEATURE_TYPE}_${model_basename}.json" \
+        "$PROJECT_ROOT/data/${dataset}.test_${SPEAKER_FEATURE_TYPE}_${model_basename}.json"
+}
+
+prompt_files() {
+    local dataset="$1"
+    printf '%s\n' \
+        "$PROJECT_ROOT/data/${dataset}.train.0shot_w${WINDOW}_${PROMPT_TYPE}.jsonl" \
+        "$PROJECT_ROOT/data/${dataset}.valid.0shot_w${WINDOW}_${PROMPT_TYPE}.jsonl" \
+        "$PROJECT_ROOT/data/${dataset}.test.0shot_w${WINDOW}_${PROMPT_TYPE}.jsonl"
+}
+
 generate_features() {
     local dataset="$1"
+    local ready_files=()
+    mapfile -t ready_files < <(feature_files "$dataset")
+    if [[ "${PRC_EMO_FORCE_REGEN:-0}" != "1" ]] && all_files_ready "${ready_files[@]}"; then
+        echo "===== Skipping existing emotion/speaker features: $dataset ====="
+        return 0
+    fi
+
     echo "===== Generating Qwen2.5 emotion descriptions: $dataset on GPU $GEN_GPU ====="
     if ! run_logged "${dataset}_emotion_features" env \
         CUDA_VISIBLE_DEVICES="$GEN_GPU" \
@@ -62,6 +101,13 @@ generate_features() {
 
 prepare_prompts() {
     local dataset="$1"
+    local ready_files=()
+    mapfile -t ready_files < <(prompt_files "$dataset")
+    if [[ "${PRC_EMO_FORCE_REGEN:-0}" != "1" ]] && all_files_ready "${ready_files[@]}"; then
+        echo "===== Skipping existing retrieval-augmented prompts: $dataset ====="
+        return 0
+    fi
+
     echo "===== Building retrieval-augmented prompts: $dataset on GPU $GEN_GPU ====="
     if ! run_logged "${dataset}_prompt_preprocessing" env \
         CUDA_VISIBLE_DEVICES="$GEN_GPU" \
