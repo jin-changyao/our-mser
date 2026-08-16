@@ -39,7 +39,7 @@ SPLITS = [
     for item in os.environ.get("PRC_EMO_SPLITS", "valid,test,train").split(",")
     if item.strip()
 ]
-INPUT_MAX_LENGTH = int(os.environ.get("PRC_EMO_INPUT_MAX_LENGTH", "2048"))
+INPUT_MAX_LENGTH = int(os.environ.get("PRC_EMO_INPUT_MAX_LENGTH", "1024"))
 MAX_NEW_TOKENS = int(os.environ.get("PRC_EMO_MAX_NEW_TOKENS", "800"))
 BATCH_SIZE = max(1, int(os.environ.get("PRC_EMO_BATCH_SIZE", "2")))
 
