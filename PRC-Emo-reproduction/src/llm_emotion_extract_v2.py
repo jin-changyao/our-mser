@@ -42,6 +42,11 @@ SPLITS = [
 INPUT_MAX_LENGTH = int(os.environ.get("PRC_EMO_INPUT_MAX_LENGTH", "1024"))
 MAX_NEW_TOKENS = int(os.environ.get("PRC_EMO_MAX_NEW_TOKENS", "800"))
 BATCH_SIZE = max(1, int(os.environ.get("PRC_EMO_BATCH_SIZE", "2")))
+DO_SAMPLE = os.environ.get("PRC_EMO_DO_SAMPLE", "1").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 if DATASET not in {"iemocap", "meld"}:
     raise ValueError(f"This reproduction script currently supports iemocap/meld, got {DATASET}")
@@ -104,14 +109,14 @@ def build_prompt(sample, utterance_index, window=5):
     start = max(0, utterance_index - window + 1)
     context = " ".join(tagged[start : utterance_index + 1])
     current_speaker = names[utterance_index]
-    current_utterance = tagged[utterance_index]
+    current_utterance = sample["sentences"][utterance_index]
     return (
         "You are an expert in analyzing human surface and implicit emotions through conversation context.\n"
         "### Task ###\n"
         "1. Analyze **explicit emotion** (outward expression based on their words and tone.) and **implicit emotion** (true inner feeling, even if not directly expressed.)\n"
         "2. Use **natural language descriptions** (no emotion labels like 'sappiness')\n"
         "3. Use **at least 20 words**, but no more than 50 words each\n"
-        "4. You MUST take into account the entire past conversation context, including what the current speaker and others have said earlier."
+        "4. You MUST take into account the entire past conversation context, including what the current speaker and others have said earlier.\n"
         "### Conversation Context ###\n"
         f"{context}\n\n"
         "### Focus Utterance ###\n"
@@ -122,10 +127,12 @@ def build_prompt(sample, utterance_index, window=5):
         "1. Output **ONLY** the JSON object\n"
         "2. No explanations/thinking processes\n"
         "3. No markdown/code formatting\n"
-        "4. Keys must be exactly as shown\n\n"
-        "Example Valid Response:\n"
-        '{\n"ExplicitEmotion": "The speaker\'s cheerful tone and frequent use of positive adjectives suggest outwardly optimistic engagement...",\n'
-        '"ImplicitEmotion": "Underneath the enthusiastic delivery, a slight hesitation in phrasing hints at unspoken reservations..."\n}'
+        "4. Keys must be exactly as shown\n"
+        "5. Both values are mandatory and must be non-empty natural-language descriptions.\n"
+        "6. Stop immediately after the closing brace; do not generate Human/Assistant turns or another JSON object.\n\n"
+        "Return exactly one object with both fields filled in:\n"
+        '{\n"ExplicitEmotion": "<20-50 word description>",\n'
+        '"ImplicitEmotion": "<20-50 word description>"\n}'
     )
 
 
@@ -213,7 +220,7 @@ def write_jsonl(handle, record):
 print(
     f"Configuration: dataset={DATASET}, splits={SPLITS}, "
     f"max_utterances={MAX_UTTERANCES or 'all'}, force_regen={FORCE_REGEN}, "
-    f"suffix={OUTPUT_SUFFIX or '<none>'}, model={MODEL_PATH}"
+    f"suffix={OUTPUT_SUFFIX or '<none>'}, do_sample={DO_SAMPLE}, model={MODEL_PATH}"
 )
 
 print("Loading model ...")
@@ -315,18 +322,19 @@ try:
                     max_length=INPUT_MAX_LENGTH,
                 ).to(device)
                 with torch.no_grad():
-                    output_ids = model.generate(
-                        input_ids=inputs["input_ids"],
-                        attention_mask=inputs["attention_mask"],
-                        max_new_tokens=MAX_NEW_TOKENS,
-                        temperature=0.3,
-                        top_p=0.9,
-                        do_sample=True,
-                        repetition_penalty=1.2,
-                        eos_token_id=TOKENIZER.eos_token_id,
-                        pad_token_id=TOKENIZER.eos_token_id,
-                        num_return_sequences=1,
-                    )
+                    generation_kwargs = {
+                        "input_ids": inputs["input_ids"],
+                        "attention_mask": inputs["attention_mask"],
+                        "max_new_tokens": MAX_NEW_TOKENS,
+                        "repetition_penalty": 1.2,
+                        "eos_token_id": TOKENIZER.eos_token_id,
+                        "pad_token_id": TOKENIZER.eos_token_id,
+                        "num_return_sequences": 1,
+                        "do_sample": DO_SAMPLE,
+                    }
+                    if DO_SAMPLE:
+                        generation_kwargs.update(temperature=0.3, top_p=0.9)
+                    output_ids = model.generate(**generation_kwargs)
                 input_width = inputs["input_ids"].shape[1]
                 raw_outputs = TOKENIZER.batch_decode(
                     output_ids[:, input_width:], skip_special_tokens=True
