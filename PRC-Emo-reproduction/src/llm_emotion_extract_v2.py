@@ -115,7 +115,7 @@ def build_prompt(sample, utterance_index, window=5):
         "### Task ###\n"
         "1. Analyze **explicit emotion** (outward expression based on their words and tone.) and **implicit emotion** (true inner feeling, even if not directly expressed.)\n"
         "2. Use **natural language descriptions** (no emotion labels like 'sappiness')\n"
-        "3. Use **at least 20 words**, but no more than 50 words each\n"
+        "3. Use concise but informative natural-language descriptions; no fixed word count is required.\n"
         "4. You MUST take into account the entire past conversation context, including what the current speaker and others have said earlier.\n"
         "### Conversation Context ###\n"
         f"{context}\n\n"
@@ -131,8 +131,8 @@ def build_prompt(sample, utterance_index, window=5):
         "5. Both values are mandatory and must be non-empty natural-language descriptions.\n"
         "6. Stop immediately after the closing brace; do not generate Human/Assistant turns or another JSON object.\n\n"
         "Return exactly one object with both fields filled in:\n"
-        '{\n"ExplicitEmotion": "<20-50 word description>",\n'
-        '"ImplicitEmotion": "<20-50 word description>"\n}'
+        '{\n"ExplicitEmotion": "<description>",\n'
+        '"ImplicitEmotion": "<description>"\n}'
     )
 
 
