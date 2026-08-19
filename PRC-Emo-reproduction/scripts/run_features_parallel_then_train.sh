@@ -17,6 +17,7 @@ WINDOW="${WINDOW:-5}"
 PROMPT_TYPE="${PROMPT_TYPE:-ImplicitEmotion_V3}"
 EXTRACT_LLM_ID="${EXTRACT_LLM_ID:-Qwen2.5-7B-Instruct}"
 SPEAKER_FEATURE_TYPE="${SPEAKER_FEATURE_TYPE:-spdescV6}"
+SPEAKER_FEATURE_SUFFIX="${SPEAKER_FEATURE_SUFFIX:-${SPEAKER_FEATURE_TYPE}_${EXTRACT_LLM_ID}}"
 EPOCHS="${EPOCHS:-4}"
 LR="${LR:-3e-4}"
 LORA_R="${LORA_R:-32}"
@@ -158,7 +159,8 @@ prepare_prompts() {
         --dataset "$dataset" \
         --window "$WINDOW" \
         --prompting_type "$PROMPT_TYPE" \
-        --extract_prompting_llm_id "$EXTRACT_LLM_ID"; then
+        --extract_prompting_llm_id "$EXTRACT_LLM_ID" \
+        --speaker_feature_suffix "$SPEAKER_FEATURE_SUFFIX"; then
         record_pipeline_status prompt_preprocessing "$dataset" "$PROMPT_GPU" 1 "$log_file"
         return 1
     fi

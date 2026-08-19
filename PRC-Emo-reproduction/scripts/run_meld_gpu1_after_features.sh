@@ -13,6 +13,7 @@ WINDOW="${WINDOW:-5}"
 PROMPT_TYPE="${PROMPT_TYPE:-ImplicitEmotion_V3}"
 EXTRACT_LLM_ID="${EXTRACT_LLM_ID:-Qwen2.5-7B-Instruct}"
 SPEAKER_FEATURE_TYPE="${SPEAKER_FEATURE_TYPE:-spdescV6}"
+SPEAKER_FEATURE_SUFFIX="${SPEAKER_FEATURE_SUFFIX:-${SPEAKER_FEATURE_TYPE}_${EXTRACT_LLM_ID}}"
 SEEDS="${SEEDS:-42,43,44}"
 EPOCHS="${EPOCHS:-4}"
 LR="${LR:-3e-4}"
@@ -77,7 +78,8 @@ if ! run_logged "$prompt_label" env \
     --dataset meld \
     --window "$WINDOW" \
     --prompting_type "$PROMPT_TYPE" \
-    --extract_prompting_llm_id "$EXTRACT_LLM_ID"; then
+    --extract_prompting_llm_id "$EXTRACT_LLM_ID" \
+    --speaker_feature_suffix "$SPEAKER_FEATURE_SUFFIX"; then
     echo "MELD prompt preprocessing failed; training will not start." >&2
     exit 1
 fi

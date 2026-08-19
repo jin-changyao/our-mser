@@ -20,6 +20,16 @@ def main() -> None:
     parser.add_argument("--window", type=int, default=5)
     parser.add_argument("--prompting_type", default="ImplicitEmotion_V3")
     parser.add_argument("--extract_prompting_llm_id", default="Qwen2.5-7B-Instruct")
+    parser.add_argument(
+        "--speaker_feature_dir",
+        default=None,
+        help="Directory containing speaker feature JSON files; defaults to data.",
+    )
+    parser.add_argument(
+        "--speaker_feature_suffix",
+        default="spdescV6_Qwen2.5-7B-Instruct",
+        help="Suffix after <dataset>.<split>_ for speaker feature files.",
+    )
     args = parser.parse_args()
 
     # Import after changing to the project root because the author's module
@@ -39,6 +49,8 @@ def main() -> None:
             window=args.window,
             prompting_type=args.prompting_type,
             extract_prompting_llm_id=args.extract_prompting_llm_id,
+            speaker_feature_dir=args.speaker_feature_dir,
+            speaker_feature_suffix=args.speaker_feature_suffix,
         ),
     )
     print("Generated:")

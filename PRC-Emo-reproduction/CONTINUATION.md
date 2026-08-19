@@ -13,6 +13,138 @@ cd our-mser/PRC-Emo-reproduction
 
 然后阅读本文，再根据实际服务器的 GPU 编号和模型路径运行脚本。
 
+> **当前接续点（2026-08-19，优先级最高）**
+>
+> 本文前面和后面的部分保留了早期复现记录。当前实际工作已经进入“清洗说话人特征后，统一重跑五种单 seed 方法”的阶段；如果旧记录与本节冲突，以本节为准。
+
+### 当前目标
+
+使用同一套数据划分、Qwen2.5-7B-Instruct、LoRA/课程学习配置和 `seed=42`，在 IEMOCAP、MELD 上分别比较五种输入条件：
+
+| 方法 | 输入内容 |
+|---|---|
+| `none` | 对话上下文和目标句，不加入额外特征 |
+| `emotion` | 显式情绪描述和隐式情绪描述 |
+| `speaker` | 清洗后的说话人描述 |
+| `retrieval` | 检索到的相似情绪示例 |
+| `full` | 情绪描述、清洗后的说话人描述和检索示例 |
+
+每个数据集只跑一个 `seed=42`，用于先判断不同方法的相对效果。
+
+### 当前已完成
+
+1. 已确认 IEMOCAP 和 MELD 原始 `spdescV6` 都存在污染：模型常常生成多个 `Response`，第一个描述通常有效，后面继续生成与说话人特征无关的任务文本。
+2. 已在本地完成说话人特征清洗：保留第一个完整 `Response`，删除后续续写；没有有效 `Response` 的样本保留为空字符串。
+3. 已为缺失说话人描述设计固定占位文本：
+
+   ```text
+   No reliable speaker description is available.
+   ```
+
+   这样不会改变 Prompt 模板结构。
+4. 已新增自动化脚本：
+
+   ```text
+   PRC-Emo-reproduction/scripts/trim_speaker_features.py
+   PRC-Emo-reproduction/scripts/generate_experiment_prompts.py
+   PRC-Emo-reproduction/scripts/run_clean_five_methods.sh
+   ```
+
+5. 已通过 Python 编译检查和 prompt 构造 smoke test。清洗报告见：
+
+   ```text
+   speaker_feature_analysis/TRIM_REPORT.md
+   ```
+
+清洗后统计如下：
+
+| 数据集/划分 | 总数 | 有效描述 | 空描述 |
+|---|---:|---:|---:|
+| IEMOCAP train | 5163 | 5163 | 0 |
+| IEMOCAP valid | 647 | 647 | 0 |
+| IEMOCAP test | 1623 | 1532 | 91 |
+| MELD train | 9989 | 9988 | 1 |
+| MELD valid | 1109 | 1109 | 0 |
+| MELD test | 2610 | 2610 | 0 |
+
+### Prompt 是否已经生成
+
+最终的五方法 Prompt **还没有作为运行产物提交到 GitHub，也不应提交到 GitHub**。上传清洗后的六个说话人特征 JSON 和两个运行脚本后，在服务器执行自动脚本，才会生成全部 30 个 Prompt 文件：
+
+```text
+data/{iemocap,meld}.{train,valid,test}.0shot_w5_experiment_{none,emotion,speaker,retrieval,full}.jsonl
+```
+
+Prompt 生成在服务器上串行执行，使用 `PROMPT_GPU`；训练阶段才会按 GPU 波次并行执行。因此，训练不会在 Prompt 尚未完整生成时启动。
+
+### 上传到服务器
+
+本地清洗后的六个 JSON 位于 `speaker_feature_analysis/trimmed/`。它们是运行产物，不属于代码提交内容。上传方式见下方命令中的服务器路径：
+
+```powershell
+$LOCAL_ROOT = "C:\Users\Administrator\Desktop\LLM-MER\our-mser-main\github-latest\our-mser"
+$SERVER = "pc@10.214.224.230"
+$REMOTE_ROOT = "/home/pc/jcy/Our-MSER/PRC-Emo-reproduction"
+
+scp `
+  "$LOCAL_ROOT\PRC-Emo-reproduction\scripts\generate_experiment_prompts.py" `
+  "$LOCAL_ROOT\PRC-Emo-reproduction\scripts\run_clean_five_methods.sh" `
+  "$LOCAL_ROOT\PRC-Emo-reproduction\scripts\trim_speaker_features.py" `
+  "${SERVER}:${REMOTE_ROOT}/scripts/"
+
+scp `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\iemocap.test_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\iemocap.train_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\iemocap.valid_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\meld.test_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\meld.train_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "$LOCAL_ROOT\speaker_feature_analysis\trimmed\meld.valid_spdescV6_trimmed_Qwen2.5-7B-Instruct.json" `
+  "${SERVER}:${REMOTE_ROOT}/data/"
+```
+
+### 服务器运行
+
+```bash
+cd /home/pc/jcy/Our-MSER/PRC-Emo-reproduction
+conda activate speechcuellm
+chmod +x scripts/generate_experiment_prompts.py scripts/run_clean_five_methods.sh
+bash -n scripts/run_clean_five_methods.sh
+
+PRC_EMO_ATTN_IMPL=sdpa \
+GPU0=0 GPU1=1 GPU2=2 PROMPT_GPU=0 \
+nohup bash scripts/run_clean_five_methods.sh \
+  > logs/clean_five_methods_launcher.log 2>&1 &
+echo $!
+```
+
+调度顺序为：
+
+1. IEMOCAP 生成五种 Prompt；
+2. IEMOCAP 第一波训练 `none`、`emotion`、`retrieval`，分别使用 GPU0、GPU1、GPU2；
+3. 第一波全部结束后训练 `speaker`、`full`；
+4. IEMOCAP 完成后，对 MELD 重复同样流程。
+
+运行目录为：
+
+```text
+runs/clean_five_methods_seed42_<timestamp>/
+logs/clean_five_methods_seed42_<timestamp>/
+```
+
+最终汇总文件为运行目录下的 `RESULTS.md`，状态表为 `run_status.tsv`。查看总启动日志：
+
+```bash
+tail -f logs/clean_five_methods_launcher.log
+```
+
+### 当前下一步
+
+1. 将三个脚本和六个清洗后的说话人特征上传服务器；
+2. 运行上面的自动化脚本，确认 Prompt 预检查通过；
+3. 待五种方法全部完成后，下载 `RESULTS.md`、`run_status.tsv`、训练日志和各方法的最终结果 JSON；
+4. 对比两数据集的 weighted F1、macro F1、accuracy 以及失败样本数量；
+5. 在单 seed 结果稳定后，再决定是否进行多 seed 复核。
+
 ## 1. 我们在复现什么
 
 目标论文是：

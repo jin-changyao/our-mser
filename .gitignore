@@ -15,3 +15,7 @@ __pycache__/
 *.ckpt
 
 *.log
+
+# Locally generated speaker-feature artifacts and cleaned copies.
+speaker_feature_analysis/*.json
+speaker_feature_analysis/trimmed/*.json

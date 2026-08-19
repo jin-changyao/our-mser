@@ -4,11 +4,13 @@ import re
 import faiss  # 添加FAISS向量检索库
 import os
 import numpy as np
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import similarity_matrix
 
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com' 
+NO_SPEAKER_DESCRIPTION = "No reliable speaker description is available."
 # === 新增：加载情感检索库并构建FAISS索引 ===
 def load_retrieval_library(retrieval_path):
     """加载情感检索库并构建FAISS索引"""
@@ -493,6 +495,10 @@ def gen_ImplicitEmotion_V3_prompting_messages(data_name, conv, around_window, s_
             f"- Explicit Emotion Interpretation: {emotion_surface}\n"
             f"- Implicit Emotion Interpretation: {emotion_implicit}\n"
         )
+        # Keep the same prompt template even when a speaker feature is unavailable.
+        desc2 = desc2.strip()
+        if desc2.lower() in {"", "null", "none", "no prediction"}:
+            desc2 = NO_SPEAKER_DESCRIPTION
         desc_info_msg = (
             f"\n### Speaker: {speaker_name}\n"
             f"- {desc2}\n"
@@ -636,7 +642,15 @@ def process(paths_folder_preprocessed_data, args):
         #prompt 类型不是 "default"，则从指定文件中加载“说话人描述”
         if prompting_type not in ["default" ]:
             desc_speaker_data = json.load(open(f'{folder_data}/{data_name}.{d_type}_{prompting_type}_{extract_prompting_llm_id}.json'))
-            desc_speaker_data_2 = json.load(open(f'{folder_data}/{data_name}.{d_type}_spdescV6_Qwen2.5-7B-Instruct.json'))
+            speaker_feature_dir = getattr(args, "speaker_feature_dir", None) or folder_data
+            speaker_feature_suffix = getattr(
+                args, "speaker_feature_suffix", "spdescV6_Qwen2.5-7B-Instruct"
+            )
+            speaker_feature_path = (
+                Path(speaker_feature_dir)
+                / f'{data_name}.{d_type}_{speaker_feature_suffix}.json'
+            )
+            desc_speaker_data_2 = json.load(open(speaker_feature_path))
             processed_desc_speaker_data = {}
             #如果 prompt 类型中包含 "spdesc"，就用 preprocess_desc_speaker 函数对每条描述做预处理：
             if desc_speaker_data is not None and "spdescV2" == prompting_type:
@@ -766,4 +780,3 @@ def process(paths_folder_preprocessed_data, args):
 #     process('train', around_window=5, use_spdesc=True)
 #     process('test', around_window=5, use_spdesc=True)
 #     process('valid', around_window=5, use_spdesc=True)
-
