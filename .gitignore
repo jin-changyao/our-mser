@@ -19,3 +19,6 @@ __pycache__/
 # Locally generated speaker-feature artifacts and cleaned copies.
 speaker_feature_analysis/*.json
 speaker_feature_analysis/trimmed/*.json
+
+# Generated long-form evaluation report.
+PRC-Emo-reproduction/MELD_RESULTS.md
