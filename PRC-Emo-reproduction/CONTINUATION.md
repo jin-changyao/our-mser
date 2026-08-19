@@ -167,11 +167,39 @@ scripts/run_iemocap_ablation_2gpu.sh
 
 该实验一共运行四个任务，不是四种条件各跑三个 seed。若要重复其他 seed，可以修改 `SEED` 后重新运行。
 
-## 4. 当前待完成的实验
+### 3.5 已完成的 IEMOCAP 四组消融实验（seed=42）
 
-### 4.1 IEMOCAP 消融实验
+截至 2026-08-19，四组 Prompt 生成和训练任务均正常结束（各任务 exit code 为 0）。四组数据规模一致：训练集 5163、验证集 647、测试集 1623。测试结果如下：
 
-需要在服务器上传并运行：
+| 条件 | weighted F1 | macro F1 | accuracy | 失败样本数 |
+|---|---:|---:|---:|---:|
+| `none` | 0.6889 | 0.6722 | 0.6882 | 506 |
+| `explicit` | **0.7175** | **0.7017** | **0.7166** | 460 |
+| `retrieval` | 0.6985 | 0.5917 | 0.6987 | 489 |
+| `speaker` | 0.6670 | 0.0408 | 0.6482 | 571 |
+
+相对 `none`，`explicit` 的 weighted F1、macro F1、accuracy 分别提高 0.0286、0.0295、0.0284；`retrieval` 的 weighted F1 和 accuracy 小幅提高，但 macro F1 明显下降；`speaker` 的结果暂时不能用来判断说话人特征是否有害。
+
+这只是单个 seed 的结果，不能作为论文级结论。当前诊断是：
+
+- `explicit` 是目前最清晰、最稳定的正向贡献。日志中的预测只包含六个合法情绪类别，且没有发现同类的格式污染；
+- `retrieval` 有 1 个预测被解析成了类似 `sad (from iemocap, distance:` 的异常类别，导致官方 macro F1 被额外类别拉低。这个样本不能在不重跑的情况下直接改写指标；
+- `speaker` 的输入特征存在严重污染。检查发现已有 `spdescV6` 文件包含很长的对话、HTML 转义文本和无关任务续写，而不是干净的说话人画像；测试集中至少 91/1623 条预测因此变成了整段 Prompt/HTML 字符串形式的“类别”。所以 `speaker` 的 macro F1=0.0408 主要反映输入/解析失败，不能解释为说话人特征本身的真实效果；
+- `speaker` 任务的训练步数也异常偏大（约 1404，而其他条件约 378–540），与说话人 Prompt 过长相互印证，可能触发了截断或样本打包差异。
+
+本次结果和诊断来自服务器运行产物：
+
+```text
+runs/iemocap_ablation_2gpu/RESULTS.md
+logs/iemocap_ablation_2gpu/train_*.log
+logs/iemocap_ablation_2gpu/prompt_*.log
+```
+
+## 4. 当前实验状态
+
+### 4.1 IEMOCAP 消融实验：已完成，但需要清理后复跑 `speaker`
+
+本轮已经使用以下命令完成四组 `seed=42` 运行：
 
 ```bash
 cd /home/pc/jcy/Our-MSER/PRC-Emo-reproduction
@@ -211,7 +239,9 @@ GPU0=0 GPU2=2 SEED=42 \
 bash scripts/run_iemocap_ablation_2gpu.sh
 ```
 
-### 4.2 MELD 正式训练结果
+当前不能直接把四组排成最终可信的模块贡献排序。下一步应先重新生成并验证干净的说话人特征，再至少复跑 `speaker` 和完整方法；如果修正了输出解析规则，也应在同一规则下复跑所有消融条件。
+
+### 4.2 MELD 正式训练结果：待整理
 
 MELD 的 GPU1 训练脚本已经准备好，但需要检查服务器上实际训练日志和各 seed 的最终指标。不要把之前特征文件为 `No prediction` 时的训练指标当作有效结果。
 
@@ -293,10 +323,10 @@ python -m pip install -r requirements_server_extra.txt
 
 ## 8. 当前 Git 状态和提交说明
 
-在本次整理前，GitHub `main` 的最新提交为：
+本次更新前，GitHub `main` 的最新提交为：
 
 ```text
-385b358 Revert "Remove fixed emotion description word limit"
+3118ea6 Document current PRC-Emo reproduction status
 ```
 
 已提交到仓库的主要修改包括：
@@ -309,7 +339,7 @@ python -m pip install -r requirements_server_extra.txt
 - 失败情绪特征定点修复工具；
 - 服务器依赖和运行说明。
 
-本次整理需要一并提交的新文件为：
+此前已经提交到仓库的复现代码和脚本包括：
 
 ```text
 PRC-Emo-reproduction/CONTINUATION.md
@@ -318,14 +348,15 @@ PRC-Emo-reproduction/scripts/run_iemocap_ablation_2gpu.sh
 PRC-Emo-reproduction/scripts/run_meld_gpu1_after_features.sh
 ```
 
+本次更新只修改 `CONTINUATION.md`，补充 IEMOCAP 消融实验的真实结果和数据污染诊断。
+
 不要提交仓库根目录下的迁移压缩包、stage 临时目录、训练结果和日志。
 
 ## 9. 下一步优先级
 
-1. 将本文件和三个新增脚本推送到 GitHub；
-2. 在服务器运行 IEMOCAP 四组消融实验；
-3. 检查四组的 `result_test_final_full_step-*.json`；
-4. 比较 weighted F1、macro F1 和 accuracy；
-5. 检查 MELD GPU1 三个 seed 的结果；
-6. 决定是否对四种消融条件分别运行多个 seed；
-7. 最后再整理论文中的实验表格和结论。
+1. 重新生成并检查干净的 IEMOCAP/MELD 说话人特征，避免把整段对话或无关模型续写写入画像；
+2. 明确输出解析策略：合法情绪标签严格按六类统计，异常字符串单独报告，不能混入类别集合；
+3. 复跑 IEMOCAP 的 `speaker` 条件和完整方法，确认清理后的真实影响；
+4. 检查 MELD GPU1 的三个 seed 结果和失败样本；
+5. 对四种消融条件运行多个 seed，并报告 `mean ± std`；
+6. 在完成上述复核前，不把当前单 seed 结果写成完整的模块贡献结论。
